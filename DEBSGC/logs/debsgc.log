@@ -1,0 +1,21 @@
+2014-02-04 00:23:28.844 [ERROR] display.GenericChartDisplay:56 - Error saving file to PDF
+java.io.FileNotFoundException: home/abhinav/Desktop/Load Prediction_02-04-2014 00-23-28.pdf (No such file or directory)
+	at java.io.FileOutputStream.open(Native Method)
+	at java.io.FileOutputStream.<init>(FileOutputStream.java:221)
+	at java.io.FileOutputStream.<init>(FileOutputStream.java:110)
+	at display.GenericChartDisplay$LazySave.<init>(GenericChartDisplay.java:75)
+	at display.GenericChartDisplay.<init>(GenericChartDisplay.java:54)
+	at display.BarChartDisplay.<init>(BarChartDisplay.java:39)
+	at display.BarChartExample.main(BarChartExample.java:12)
+2014-02-04 00:33:39.581 [ERROR] display.GenericChartDisplay:98 - Error creating PDF file
+java.io.IOException: No such file or directory
+	at java.io.UnixFileSystem.createFileExclusively(Native Method)
+	at java.io.File.createNewFile(File.java:1006)
+	at display.GenericChartDisplay$LazySave.run(GenericChartDisplay.java:81)
+	at java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:471)
+	at java.util.concurrent.FutureTask.runAndReset(FutureTask.java:304)
+	at java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.access$301(ScheduledThreadPoolExecutor.java:178)
+	at java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:293)
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1145)
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:615)
+	at java.lang.Thread.run(Thread.java:744)
