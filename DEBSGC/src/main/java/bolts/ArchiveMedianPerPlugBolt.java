@@ -23,6 +23,17 @@ public class ArchiveMedianPerPlugBolt implements IRichBolt {
 	 */
 	private static final long serialVersionUID = 1L;
 	private OutputCollector _collector;
+	private Fields outputFields;
+
+	/**
+	 * Initialize with a declaration of the output fields for clarity while
+	 * configuring topology.
+	 * 
+	 * @param outputFields
+	 */
+	public ArchiveMedianPerPlugBolt(Fields outputFields) {
+		this.outputFields = outputFields;
+	}
 
 	@Override
 	public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
@@ -65,7 +76,7 @@ public class ArchiveMedianPerPlugBolt implements IRichBolt {
 
 	@Override
 	public void declareOutputFields(OutputFieldsDeclarer declarer) {
-		declarer.declare(new Fields("HistoryBean", "houseid", "timeSlice"));
+		declarer.declare(this.outputFields);
 
 	}
 

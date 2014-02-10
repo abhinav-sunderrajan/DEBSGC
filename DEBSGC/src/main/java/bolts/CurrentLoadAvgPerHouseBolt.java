@@ -33,9 +33,19 @@ public class CurrentLoadAvgPerHouseBolt implements IRichBolt {
 	private EPRuntime cepRT;
 	private OutputCollector _collector;
 	private long avgCalcInterval;
+	private Fields outFields;
 
-	public CurrentLoadAvgPerHouseBolt(long avgCalcInterval) throws ParseException {
+	/**
+	 * Initialize with the size of the window for calculating the current
+	 * average and output Fields
+	 * 
+	 * @param avgCalcInterval
+	 * @param outFields
+	 * @throws ParseException
+	 */
+	public CurrentLoadAvgPerHouseBolt(long avgCalcInterval, Fields outFields) throws ParseException {
 		this.avgCalcInterval = avgCalcInterval;
+		this.outFields = outFields;
 	}
 
 	public void update(Integer houseId, Double averageLoad, Long timestamp, Long evaluationTime) {
@@ -56,11 +66,12 @@ public class CurrentLoadAvgPerHouseBolt implements IRichBolt {
 		cepAdm.createEPL("create variable long LL = " + PlatformCore.liveStartTime);
 		cepAdm.createEPL("create variable long UL = "
 				+ (PlatformCore.liveStartTime + avgCalcInterval - 1000));
-		cepAdm.createEPL("on beans.SmartPlugBean(id > UL) set LL=(LL+" + avgCalcInterval
+		cepAdm.createEPL("on beans.SmartPlugBean(timestamp > UL) set LL=(LL+" + avgCalcInterval
 				+ "), UL=(UL+" + avgCalcInterval + ") ");
 		EPStatement cepStatement = cepAdm
 				.createEPL("select houseId,AVG(value) as avgVal,timestamp,current_timestamp FROM "
-						+ "beans.SmartPlugBean.std:groupwin(houseId).win:keepall()"
+						+ "beans.SmartPlugBean(property=" + PlatformCore.LOAD_PROPERTY
+						+ ").std:groupwin(houseId).win:keepall()"
 						+ ".win:expr(timestamp >=LL AND timestamp<UL) group by houseId");
 		cepStatement.setSubscriber(this);
 	}
@@ -79,7 +90,7 @@ public class CurrentLoadAvgPerHouseBolt implements IRichBolt {
 
 	@Override
 	public void declareOutputFields(OutputFieldsDeclarer declarer) {
-		declarer.declare(new Fields("houseId", "CurrentLoadPerHouseBean"));
+		declarer.declare(outFields);
 
 	}
 

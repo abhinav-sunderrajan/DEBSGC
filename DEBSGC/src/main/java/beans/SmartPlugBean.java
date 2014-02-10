@@ -5,8 +5,8 @@ import java.io.Serializable;
 public class SmartPlugBean implements Serializable {
 
 	/**
-	 * 
-	 */
+    * 
+    */
 	private static final long serialVersionUID = 1L;
 	private long id;
 	private long timestamp;
@@ -15,6 +15,8 @@ public class SmartPlugBean implements Serializable {
 	private short plugId;
 	private short householdId;
 	private short houseId;
+	private double globalMedian;
+	private long queryEvalTime;
 
 	/**
 	 * @param id
@@ -144,6 +146,22 @@ public class SmartPlugBean implements Serializable {
 	 */
 	public void setHouseId(short houseId) {
 		this.houseId = houseId;
+	}
+
+	public double getGlobalMedian() {
+		return globalMedian;
+	}
+
+	public void setGlobalMedian(double globalMedian) {
+		this.globalMedian = globalMedian;
+	}
+
+	public long getQueryEvalTime() {
+		return queryEvalTime;
+	}
+
+	public void setQueryEvalTime(long queryEvalTime) {
+		this.queryEvalTime = queryEvalTime;
 	}
 
 }

@@ -93,4 +93,5 @@ public abstract class GenericChartDisplay extends ApplicationFrame {
 
 		}
 	}
+
 }

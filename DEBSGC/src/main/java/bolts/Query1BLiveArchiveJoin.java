@@ -26,6 +26,11 @@ public class Query1BLiveArchiveJoin implements IRichBolt {
 	private static Calendar cal = Calendar.getInstance();
 	private OutputCollector _collector;
 	private DescriptiveStatistics stats = new DescriptiveStatistics();
+	private Fields outFields;
+
+	public Query1BLiveArchiveJoin(Fields outFields) {
+		this.outFields = outFields;
+	}
 
 	@Override
 	public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
@@ -75,8 +80,7 @@ public class Query1BLiveArchiveJoin implements IRichBolt {
 
 	@Override
 	public void declareOutputFields(OutputFieldsDeclarer declarer) {
-		declarer.declare(new Fields("houseId", "householdId", "plugId", "currentLoad",
-				"predictedLoad", "predictedTimeString", "evalTime"));
+		declarer.declare(outFields);
 
 	}
 

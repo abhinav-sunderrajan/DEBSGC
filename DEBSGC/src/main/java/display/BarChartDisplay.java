@@ -3,6 +3,8 @@ package display;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.GradientPaint;
+import java.util.Map;
+import java.util.Map.Entry;
 
 import org.jfree.chart.ChartFactory;
 import org.jfree.chart.ChartPanel;
@@ -28,16 +30,23 @@ public class BarChartDisplay extends GenericChartDisplay {
 	 */
 	private static final long serialVersionUID = 1L;
 	private DefaultCategoryDataset dataset;
-	private final String CURRENT_LOAD = "Current Load";
-	private final String PREDICTED_LOAD = "Predicted Load";
+	private String xAxisLabel;
+	private String yAxisLabel;
 
-	public BarChartDisplay(String title, String imageSaveDirectory, DefaultCategoryDataset dataset) {
+	/**
+	 * 
+	 * @param title
+	 * @param xAxisLabel
+	 * @param yAxisLabel
+	 * @param imageSaveDirectory
+	 * @param dataset
+	 */
+	public BarChartDisplay(String title, String xAxisLabel, String yAxisLabel,
+			String imageSaveDirectory, DefaultCategoryDataset dataset) {
 		super(title, imageSaveDirectory);
-		this.dataset = dataset;
-		for (short i = 0; i < 40; i++) {
-			this.dataset.addValue(0.0, CURRENT_LOAD, String.valueOf(i));
-			this.dataset.addValue(0.0, PREDICTED_LOAD, String.valueOf(i));
-		}
+		this.setDataset(dataset);
+		this.xAxisLabel = xAxisLabel;
+		this.yAxisLabel = yAxisLabel;
 
 		settings();
 		chartPanel = new ChartPanel(chart);
@@ -55,25 +64,25 @@ public class BarChartDisplay extends GenericChartDisplay {
 	 * the same.
 	 * 
 	 * @param houseId
-	 * @param currentAvg
-	 * @param predictedLoad
+	 * @param rowValues
 	 * @param predictedTime
 	 */
-	public synchronized void refreshDisplayValues(int houseId, double currentAvg,
-			double predictedLoad, String predictedTime) {
+	public synchronized void refreshDisplayValues(int houseId, Map<String, Double> rowValues,
+			String predictedTime) {
 
 		chart.setTitle(title + " " + predictedTime);
-		this.dataset.setValue(currentAvg, CURRENT_LOAD, String.valueOf(houseId));
-		this.dataset.setValue(predictedLoad, PREDICTED_LOAD, String.valueOf(houseId));
+		for (Entry<String, Double> entry : rowValues.entrySet()) {
+			this.getDataset().setValue(entry.getValue(), entry.getKey(), String.valueOf(houseId));
+		}
 
 	}
 
 	@Override
 	protected void settings() {
 		chart = ChartFactory.createBarChart(title, // chart title
-				"House ID", // domain axis label
-				"Load(W)", // range axis label
-				dataset, // data
+				xAxisLabel, // domain axis label
+				yAxisLabel, // range axis label
+				getDataset(), // data
 				PlotOrientation.VERTICAL, // orientation
 				true, // include legend
 				true, // tooltips?
@@ -103,11 +112,20 @@ public class BarChartDisplay extends GenericChartDisplay {
 
 		renderer.setSeriesPaint(0, gp0);
 		renderer.setSeriesPaint(1, gp1);
+		renderer.setShadowVisible(false);
 
 		final CategoryAxis domainAxis = plot.getDomainAxis();
 		domainAxis.setCategoryLabelPositions(CategoryLabelPositions
 				.createUpRotationLabelPositions(Math.PI / 6.0));
 		this.setVisible(true);
 
+	}
+
+	public DefaultCategoryDataset getDataset() {
+		return dataset;
+	}
+
+	public void setDataset(DefaultCategoryDataset dataset) {
+		this.dataset = dataset;
 	}
 }

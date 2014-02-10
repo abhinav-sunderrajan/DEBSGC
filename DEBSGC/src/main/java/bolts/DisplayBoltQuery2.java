@@ -1,13 +1,15 @@
 package bolts;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Calendar;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicLong;
 
 import main.PlatformCore;
 
-import org.jfree.chart.JFreeChart;
 import org.jfree.data.category.DefaultCategoryDataset;
 import org.jfree.data.time.Minute;
 import org.jfree.data.time.TimeSeries;
@@ -20,13 +22,7 @@ import backtype.storm.tuple.Tuple;
 import display.BarChartDisplay;
 import display.StreamJoinDisplay;
 
-/**
- * This bolt is responsible for sending the tuples to the {@link JFreeChart}s
- * 
- * @author abhinav
- * 
- */
-public class DisplayBolt implements IRichBolt {
+public class DisplayBoltQuery2 implements IRichBolt {
 
 	/**
 	 * 
@@ -40,15 +36,29 @@ public class DisplayBolt implements IRichBolt {
 	private AtomicLong timer;
 	private boolean throughputFlag;
 	private BarChartDisplay valuesOutput;
+	public final String PERCENTAGE_PLUGS = "PERCENTAGE_PLUGS";
+	private HashMap<String, Double> barchartDisplayMap;
 
 	@SuppressWarnings("deprecation")
-	public DisplayBolt(int streamRate) {
+	@Override
+	public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
 		display = StreamJoinDisplay.getInstance("Join Performance Measure",
 				PlatformCore.configProperties.getProperty("image.save.directory"));
 
-		valuesOutput = new BarChartDisplay("Load Prediction",
+		valuesOutput = new BarChartDisplay("Outlier Detection", "House ID",
+				"% Plugs above global median",
 				PlatformCore.configProperties.getProperty("image.save.directory"),
 				new DefaultCategoryDataset());
+		barchartDisplayMap = new HashMap<String, Double>();
+		barchartDisplayMap.put(PERCENTAGE_PLUGS, 0.0);
+
+		for (short i = 0; i < 40; i++) {
+			for (Entry<String, Double> entry : barchartDisplayMap.entrySet()) {
+				valuesOutput.getDataset().addValue(entry.getValue(), entry.getKey(),
+						String.valueOf(i));
+			}
+
+		}
 
 		timer = new AtomicLong(0);
 		throughputFlag = true;
@@ -59,29 +69,25 @@ public class DisplayBolt implements IRichBolt {
 		valueMap = new HashMap<Integer, Double>();
 		valueMap.put((2 + this.hashCode()), 0.0);
 		valueMap.put((1 + this.hashCode()), 0.0);
-	}
-
-	@Override
-	public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
 
 	}
 
 	@Override
 	public void execute(Tuple input) {
-
 		if (throughputFlag) {
 			timer.set(Calendar.getInstance().getTimeInMillis());
 			numOfMsgsin30Sec = count;
 		}
 		count++;
 		throughputFlag = false;
-		valuesOutput.refreshDisplayValues(input.getShort(0), input.getDouble(1),
-				input.getDouble(2), input.getString(3));
+		barchartDisplayMap.put(PERCENTAGE_PLUGS, round(input.getDouble(2), 2));
+		valuesOutput
+				.refreshDisplayValues(input.getShort(1), barchartDisplayMap, input.getString(0));
 		// Refresh display values every 30 seconds
 		if ((Calendar.getInstance().getTimeInMillis() - timer.get()) >= 30000) {
 			double throughput = (1000 * (count - numOfMsgsin30Sec))
 					/ (Calendar.getInstance().getTimeInMillis() - timer.get());
-			latency = Calendar.getInstance().getTimeInMillis() - input.getLong(4);
+			latency = input.getLong(3);
 			valueMap.put((1 + this.hashCode()), latency / 1.0);
 			valueMap.put((2 + this.hashCode()), throughput);
 			display.refreshDisplayValues(valueMap);
@@ -106,6 +112,15 @@ public class DisplayBolt implements IRichBolt {
 	public Map<String, Object> getComponentConfiguration() {
 		// TODO Auto-generated method stub
 		return null;
+	}
+
+	public static double round(double value, int places) {
+		if (places < 0)
+			throw new IllegalArgumentException();
+
+		BigDecimal bd = new BigDecimal(value);
+		bd = bd.setScale(places, RoundingMode.HALF_UP);
+		return bd.doubleValue();
 	}
 
 }

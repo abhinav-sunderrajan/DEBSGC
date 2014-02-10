@@ -1,14 +1,13 @@
 package bolts;
 
-import java.sql.Timestamp;
 import java.util.Map;
 
-import main.PlatformCore;
 import utils.EsperQueries;
 import backtype.storm.task.OutputCollector;
 import backtype.storm.task.TopologyContext;
 import backtype.storm.topology.IRichBolt;
 import backtype.storm.topology.OutputFieldsDeclarer;
+import backtype.storm.tuple.Fields;
 import backtype.storm.tuple.Tuple;
 import backtype.storm.tuple.Values;
 import beans.SmartPlugBean;
@@ -20,7 +19,7 @@ import com.espertech.esper.client.EPServiceProvider;
 import com.espertech.esper.client.EPServiceProviderManager;
 import com.espertech.esper.client.EPStatement;
 
-public class PerHouseStatisticBolt implements IRichBolt {
+public class PerHouseMedianBolt implements IRichBolt {
 
 	/**
 	 * 
@@ -31,17 +30,21 @@ public class PerHouseStatisticBolt implements IRichBolt {
 	private Configuration cepConfig;
 	private EPRuntime cepRT;
 	private OutputCollector _collector;
+	private Fields outFields;
+
+	public PerHouseMedianBolt(Fields fields) {
+		outFields = fields;
+	}
 
 	@Override
 	public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
 		_collector = collector;
 		cepConfig = new Configuration();
 		cepConfig.getEngineDefaults().getThreading().setListenerDispatchPreserveOrder(false);
-		cep = EPServiceProviderManager.getProvider("PER_HOUSE_STATISTIC", cepConfig);
+		cep = EPServiceProviderManager.getProvider("PerHouseStatisticBolt", cepConfig);
 		cepConfig.addEventType("SmartPlugBean", SmartPlugBean.class.getName());
 
-		String queries[] = EsperQueries.getMedianLoadPerPlug(Long
-				.parseLong(PlatformCore.configProperties.getProperty("query2.window.size")));
+		String queries[] = EsperQueries.getMedianLoadPerPlugPerHour();
 		EPStatement cepStatement = null;
 		cepRT = cep.getEPRuntime();
 		cepAdm = cep.getEPAdministrator();
@@ -65,13 +68,12 @@ public class PerHouseStatisticBolt implements IRichBolt {
 
 	@Override
 	public void cleanup() {
-		// TODO Auto-generated method stub
 
 	}
 
 	@Override
 	public void declareOutputFields(OutputFieldsDeclarer declarer) {
-		// TODO Auto-generated method stub
+		declarer.declare(outFields);
 
 	}
 
@@ -81,8 +83,11 @@ public class PerHouseStatisticBolt implements IRichBolt {
 		return null;
 	}
 
-	public void update(Double medianLoad, Timestamp timestamp, Integer plugId, Integer houseId) {
-		_collector.emit(new Values());
+	public void update(Double medianLoad, Double globalMedian, Long timestampStart,
+			Long timestampEnd, Long queryEvalTime, Integer houseId, Integer householdId,
+			Integer plugId) {
+		_collector.emit(new Values(medianLoad, globalMedian, timestampStart, timestampEnd,
+				queryEvalTime, houseId, householdId, plugId));
 
 	}
 

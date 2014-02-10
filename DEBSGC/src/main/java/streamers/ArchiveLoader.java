@@ -49,7 +49,9 @@ public class ArchiveLoader<T> implements Runnable {
 						+ startTime
 						+ " AND time_stamp < "
 						+ endTime
-						+ "AND property=1 GROUP BY house_id,household_id,plug_id");
+						+ "AND property="
+						+ PlatformCore.LOAD_PROPERTY
+						+ " GROUP BY house_id,household_id,plug_id");
 		try {
 			while (rs.next()) {
 

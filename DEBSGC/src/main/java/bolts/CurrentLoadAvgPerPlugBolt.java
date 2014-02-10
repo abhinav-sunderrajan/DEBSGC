@@ -40,9 +40,19 @@ public class CurrentLoadAvgPerPlugBolt implements IRichBolt {
 	private EPRuntime cepRT;
 	private OutputCollector _collector;
 	private long avgCalcInterval;
+	private Fields outFields;
 
-	public CurrentLoadAvgPerPlugBolt(long avgCalcInterval) throws ParseException {
+	/**
+	 * Initialize with the size of the window for calculating the current
+	 * average and output Fields
+	 * 
+	 * @param avgCalcInterval
+	 * @param outFields
+	 * @throws ParseException
+	 */
+	public CurrentLoadAvgPerPlugBolt(long avgCalcInterval, Fields outFields) throws ParseException {
 		this.avgCalcInterval = avgCalcInterval;
+		this.outFields = outFields;
 	}
 
 	public void update(Integer houseId, Integer householdId, Integer plugId, Double averageLoad,
@@ -64,12 +74,14 @@ public class CurrentLoadAvgPerPlugBolt implements IRichBolt {
 		cepAdm.createEPL("create variable long LL = " + PlatformCore.liveStartTime);
 		cepAdm.createEPL("create variable long UL = "
 				+ (PlatformCore.liveStartTime + avgCalcInterval - 1000));
-		cepAdm.createEPL("on beans.SmartPlugBean(id > UL) set LL=(LL+" + avgCalcInterval
+		cepAdm.createEPL("on beans.SmartPlugBean(timestamp > UL) set LL=(LL+" + avgCalcInterval
 				+ "), UL=(UL+" + avgCalcInterval + ") ");
 		EPStatement cepStatement = cepAdm
 				.createEPL("select houseId,,householdId,plugId, AVG(value) as "
 						+ "avgVal,timestamp,current_timestamp FROM "
-						+ "beans.SmartPlugBean.std:groupwin(houseId,householdId,plugId).win:keepall()"
+						+ "beans.SmartPlugBean(property="
+						+ PlatformCore.LOAD_PROPERTY
+						+ ").std:groupwin(houseId,householdId,plugId).win:keepall()"
 						+ ".win:expr(timestamp >=LL AND timestamp<UL) group by houseId,householdId,plugId");
 		cepStatement.setSubscriber(this);
 
@@ -89,7 +101,7 @@ public class CurrentLoadAvgPerPlugBolt implements IRichBolt {
 
 	@Override
 	public void declareOutputFields(OutputFieldsDeclarer declarer) {
-		declarer.declare(new Fields("houseId", "householdId", "plugId", "CurrentLoadPerPlugBean"));
+		declarer.declare(outFields);
 
 	}
 

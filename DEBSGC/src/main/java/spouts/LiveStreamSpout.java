@@ -32,8 +32,8 @@ public class LiveStreamSpout<E> extends BaseRichSpout {
 	private Object monitor;
 	private Queue<E> buffer;
 	private SpoutOutputCollector _collector;
-	private int propertyFilterId;
 	private static final boolean _isDistributed = false;
+	private Fields outFields;
 
 	/**
 	 * 
@@ -46,13 +46,14 @@ public class LiveStreamSpout<E> extends BaseRichSpout {
 	 * @param writeFileDir
 	 * @param imageSaveDirectory
 	 * @param property
+	 * @param outFields
 	 */
 	public LiveStreamSpout(final ConcurrentLinkedQueue<E> buffer, final Object monitor,
 			final ScheduledExecutorService executor, final int streamRate, final int port,
-			final String writeFileDir, final String imageSaveDirectory, int property) {
+			final String writeFileDir, final String imageSaveDirectory, final Fields outFields) {
 		this.buffer = buffer;
 		this.monitor = monitor;
-		this.propertyFilterId = property;
+		this.outFields = outFields;
 
 		// Fire up the netty server to listen to streams at the given port.
 		NettyServer<E> server = new NettyServer<E>((ConcurrentLinkedQueue<E>) buffer, streamRate,
@@ -85,9 +86,8 @@ public class LiveStreamSpout<E> extends BaseRichSpout {
 
 				}
 
-				if (bean.getProperty() == propertyFilterId)
-					_collector.emit(new Values(bean, bean.getHouseId(), bean.getHouseholdId(), bean
-							.getPlugId()));
+				_collector.emit(new Values(bean, bean.getHouseId(), bean.getHouseholdId(), bean
+						.getPlugId()));
 			}
 		}
 
@@ -95,7 +95,7 @@ public class LiveStreamSpout<E> extends BaseRichSpout {
 
 	@Override
 	public void declareOutputFields(OutputFieldsDeclarer declarer) {
-		declarer.declare(new Fields("livebean", "houseId", "householdId", "plugId"));
+		declarer.declare(outFields);
 
 	}
 

@@ -22,6 +22,7 @@ import org.apache.log4j.Logger;
 import spouts.ArchiveStreamSpout;
 import spouts.LiveStreamSpout;
 import streamers.ArchiveLoader;
+import utils.EsperQueries;
 import utils.SigarSystemMonitor;
 import backtype.storm.Config;
 import backtype.storm.LocalCluster;
@@ -36,9 +37,13 @@ import bolts.ArchiveMedianPerPlugBolt;
 import bolts.CurrentLoadAvgPerHouseBolt;
 import bolts.CurrentLoadAvgPerPlugBolt;
 import bolts.DatabaseInsertorBolt;
-import bolts.DisplayBolt;
+import bolts.DisplayBoltQuery1A;
+import bolts.DisplayBoltQuery2;
+import bolts.GlobalMedianLoadBolt;
+import bolts.PerHouseMedianBolt;
 import bolts.Query1ALiveArchiveJoin;
 import bolts.Query1BLiveArchiveJoin;
+import bolts.Query2AOutlierEstimator;
 
 /**
  * A singleton instance of the stream processing platform to set up the
@@ -75,6 +80,10 @@ public class PlatformCore {
 	// history we are interested in.
 	public static Map<Short, HashMap<String, Buffer>> averageLoadPerHousePerTimeSlice = new ConcurrentHashMap<Short, HashMap<String, Buffer>>();
 	public static Map<String, HashMap<String, Buffer>> averageLoadPerPlugPerTimeSlice = new ConcurrentHashMap<String, HashMap<String, Buffer>>();
+
+	// Data structure for query 2
+
+	public static Map<Short, ConcurrentHashMap<String, Boolean>> loadStatusMap = new ConcurrentHashMap<Short, ConcurrentHashMap<String, Boolean>>();
 
 	private PlatformCore() throws ParseException {
 		monitor = new Object();
@@ -120,8 +129,9 @@ public class PlatformCore {
 
 			// Bolt for computing the median from the archive streams
 			long archiveloadStart = archiveStartTime;
-			BoltDeclarer declarer = core.builder.setBolt("ArchiveMedianPerPlugBolt",
-					new ArchiveMedianPerPlugBolt(), 10);
+			BoltDeclarer declarer = core.builder
+					.setBolt("ArchiveMedianPerPlugBolt", new ArchiveMedianPerPlugBolt(new Fields(
+							"HistoryBean", "houseid", "timeSlice")), 10);
 
 			for (int count = 0; count < NUMBER_OF_ARCHIVE_STREAMS; count++) {
 
@@ -150,7 +160,8 @@ public class PlatformCore {
 			LiveStreamSpout<SmartPlugBean> liveStreamLoadSpout = new LiveStreamSpout<SmartPlugBean>(
 					liveStreamBuffer, core.monitor, executor, streamRate, SERVER_PORT,
 					configProperties.getProperty("ingestion.file.dir"),
-					configProperties.getProperty("image.save.directory"), LOAD_PROPERTY);
+					configProperties.getProperty("image.save.directory"), new Fields("livebean",
+							"houseId", "householdId", "plugId"));
 
 			core.builder.setSpout("live_stream", liveStreamLoadSpout);
 
@@ -162,42 +173,64 @@ public class PlatformCore {
 			core.builder.setBolt(
 					"CurrentLoadAvgPerHouseBolt",
 					new CurrentLoadAvgPerHouseBolt(Long.parseLong(configProperties
-							.getProperty("query1.window.size.ms"))), 5).fieldsGrouping(
-					"live_stream", new Fields("houseId"));
+							.getProperty("query1.window.size.ms")), new Fields("houseId",
+							"CurrentLoadPerHouseBean")), 5).fieldsGrouping("live_stream",
+					new Fields("houseId"));
 
-			core.builder.setBolt("Query1ALiveArchiveJoin", new Query1ALiveArchiveJoin(), 5)
+			core.builder.setBolt(
+					"Query1ALiveArchiveJoin",
+					new Query1ALiveArchiveJoin(new Fields("houseId", "currentLoad",
+							"predictedLoad", "predictedTimeString", "evalTime")), 5)
 					.fieldsGrouping("CurrentLoadAvgPerHouseBolt", new Fields("houseId"));
-			core.builder.setBolt("display_bolt", new DisplayBolt(streamRate), 1).shuffleGrouping(
-					"Query1ALiveArchiveJoin");
+			core.builder.setBolt("DisplayBoltQuery1A", new DisplayBoltQuery1A(streamRate), 1)
+					.globalGrouping("Query1ALiveArchiveJoin");
 
 			// Topology for query 1b
 			core.builder.setBolt(
 					"CurrentLoadAvgPerPlugBolt",
 					new CurrentLoadAvgPerPlugBolt(Long.parseLong(configProperties
-							.getProperty("query1.window.size.ms"))), 5).fieldsGrouping(
+							.getProperty("query1.window.size.ms")), new Fields("houseId",
+							"householdId", "plugId", "CurrentLoadPerPlugBean")), 5).fieldsGrouping(
 					"live_stream", new Fields("houseId", "householdId", "plugId"));
-			core.builder.setBolt("Query1BLiveArchiveJoin", new Query1BLiveArchiveJoin(), 5)
+			core.builder.setBolt(
+					"Query1BLiveArchiveJoin",
+					new Query1BLiveArchiveJoin(new Fields("houseId", "householdId", "plugId",
+							"currentLoad", "predictedLoad", "predictedTimeString", "evalTime")), 5)
 					.fieldsGrouping("CurrentLoadAvgPerPlugBolt",
 							new Fields("houseId", "householdId", "plugId"));
 
 			// Topology for query 2
 
-			// core.builder.setSpout("live_stream", liveStreamLoadSpout);
-			// String[] medianBoltEvents = { SmartPlugBean.class.getName() };
-			//
-			// // Emits the median load for all plugs over window of the
-			// // specified size.l
-			// core.builder.setBolt(
-			// "median_bolt",
-			// new MedianLoadBolt(medianBoltEvents,
-			// EsperQueries.getGlobalMedianLoad(Long
-			// .parseLong(configProperties.getProperty("query2.window.size"))),
-			// "MEDIANBOLT"), 5).shuffleGrouping("live_stream");
-			//
-			// // Calculates the median load per
-			// core.builder.setBolt("per_house_bolt", new
-			// PerHouseStatisticBolt(), 5).fieldsGrouping(
-			// "live_stream", new Fields("houseid", "householdid"));
+			String[] medianBoltEvents = { SmartPlugBean.class.getName() };
+
+			// Emits the median load for all plugs over window of the
+			// specified size
+			core.builder.setBolt(
+					"GlobalMedianLoadBolt",
+					new GlobalMedianLoadBolt(medianBoltEvents, EsperQueries
+							.getGlobalMedianLoadPerHour(), "GlobalMedianLoadBolt", new Fields(
+							"livebean", "houseid", "householdid", "plugid")), 1).globalGrouping(
+					"live_stream");
+
+			// Calculates the median load per plug
+			core.builder.setBolt(
+					"PerHouseMedianBolt",
+					new PerHouseMedianBolt(new Fields("medianLoad", "globalMedian",
+							"timestampStart", "timestampEnd", "queryEvalTime", "houseId",
+							"percentage", "latency")), 5).fieldsGrouping("GlobalMedianLoadBolt",
+					new Fields("houseId", "householdId", "plugId"));
+
+			// Compares the median load of the plug with the global median
+			// before estimating the outliers per house.
+			core.builder.setBolt(
+					"Query2AOutlierEstimator",
+					new Query2AOutlierEstimator(new Fields("timeFrame", "houseId", "percentage",
+							"latency")), 5).shuffleGrouping("PerHouseMedianBolt");
+
+			// Finally send to display
+
+			core.builder.setBolt("DisplayBoltQuery2", new DisplayBoltQuery2()).globalGrouping(
+					"Query2AOutlierEstimator");
 
 			Config conf = new Config();
 			conf.setNumWorkers(2);
