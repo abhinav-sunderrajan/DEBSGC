@@ -13,11 +13,11 @@ public class EsperQueries {
 	}
 
 	public static String[] getMedianLoadPerPlugPerHour() {
-		String query1 = "SELECT MEDIAN(load) as medianLoadPlug,globalMedian"
+		String query1 = "SELECT MEDIAN(value) as medianLoadPlug,globalMedian"
 				+ ",timestamp,(timestamp - 3600 * 1000),queryEvalTime"
-				+ ",houseid,householdId,plugid FROM SmartPlugBean(property="
-				+ PlatformCore.LOAD_PROPERTY
-				+ ").std:groupwin(houseId,householdId,plugId).win:ext_timed(timestamp, 3600 seconds)";
+				+ ",houseId,householdId,plugId FROM beans.SmartPlugBean(property="
+				+ PlatformCore.LOAD_PROPERTY + ").std:groupwin(houseId,householdId,plugId)"
+				+ ".win:ext_timed(timestamp, 3600 seconds) GROUP BY houseId,householdId,plugId";
 		String[] queries = { query1 };
 		return queries;
 

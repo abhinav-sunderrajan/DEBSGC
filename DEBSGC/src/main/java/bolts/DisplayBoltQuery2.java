@@ -81,8 +81,8 @@ public class DisplayBoltQuery2 implements IRichBolt {
 		count++;
 		throughputFlag = false;
 		barchartDisplayMap.put(PERCENTAGE_PLUGS, round(input.getDouble(2), 2));
-		valuesOutput
-				.refreshDisplayValues(input.getShort(1), barchartDisplayMap, input.getString(0));
+		valuesOutput.refreshDisplayValues(input.getInteger(1), barchartDisplayMap,
+				input.getString(0));
 		// Refresh display values every 30 seconds
 		if ((Calendar.getInstance().getTimeInMillis() - timer.get()) >= 30000) {
 			double throughput = (1000 * (count - numOfMsgsin30Sec))

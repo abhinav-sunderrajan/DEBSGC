@@ -81,8 +81,8 @@ public class Query2AOutlierEstimator implements IRichBolt {
 			plugIdMap = new ConcurrentHashMap<String, Boolean>();
 			plugIdMap.put(householdId + "-" + plugId, isgreater);
 			if (isgreater) {
-				_collector.emit(new Values(timeFrame, houseId.shortValue(), 100.0, (System
-						.currentTimeMillis() - queryEvalTime)));
+				_collector.emit(new Values(timeFrame, houseId, 100.0,
+						(System.currentTimeMillis() - queryEvalTime)));
 			}
 		}
 

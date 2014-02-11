@@ -2,9 +2,7 @@ package display;
 
 import java.awt.BasicStroke;
 import java.awt.Color;
-import java.text.DecimalFormat;
 import java.text.NumberFormat;
-import java.text.SimpleDateFormat;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -14,10 +12,8 @@ import org.jfree.chart.ChartFactory;
 import org.jfree.chart.ChartPanel;
 import org.jfree.chart.axis.ValueAxis;
 import org.jfree.chart.labels.StandardXYItemLabelGenerator;
-import org.jfree.chart.labels.StandardXYToolTipGenerator;
 import org.jfree.chart.labels.XYItemLabelGenerator;
 import org.jfree.chart.plot.XYPlot;
-import org.jfree.chart.renderer.xy.XYItemRenderer;
 import org.jfree.chart.renderer.xy.XYLineAndShapeRenderer;
 import org.jfree.data.time.Minute;
 import org.jfree.data.time.TimeSeries;
@@ -39,7 +35,7 @@ public class TimeSeriesDisplay extends GenericChartDisplay {
 	private static final long serialVersionUID = 1L;
 	private TimeSeriesCollection dataset;
 	private Map<Integer, TimeSeries> timeSeriesMap;
-	private XYItemRenderer r;
+	private XYLineAndShapeRenderer renderer;
 
 	public TimeSeriesDisplay(String title, String imageSaveDirectory, TimeSeriesCollection dataset) {
 		super(title, imageSaveDirectory);
@@ -72,7 +68,7 @@ public class TimeSeriesDisplay extends GenericChartDisplay {
 	public synchronized void addToDataSeries(TimeSeries series, int key) {
 		dataset.addSeries(series);
 		timeSeriesMap.put(key, series);
-		r.setSeriesStroke(key, new BasicStroke(2.0f));
+
 	}
 
 	@Override
@@ -88,25 +84,19 @@ public class TimeSeriesDisplay extends GenericChartDisplay {
 		plot.setDomainCrosshairVisible(true);
 		plot.setRangeCrosshairVisible(true);
 
-		r = plot.getRenderer();
-		if (r instanceof XYLineAndShapeRenderer) {
-			XYLineAndShapeRenderer renderer = (XYLineAndShapeRenderer) r;
-			renderer.setBaseShapesVisible(true);
-			renderer.setBaseShapesFilled(true);
-			renderer.setDrawSeriesLineAsPath(true);
-			final StandardXYToolTipGenerator g = new StandardXYToolTipGenerator(
-					StandardXYToolTipGenerator.DEFAULT_TOOL_TIP_FORMAT, new SimpleDateFormat(
-							"hh:mm"), new DecimalFormat("0.00"));
-			renderer.setToolTipGenerator(g);
-		}
+		renderer = new XYLineAndShapeRenderer();
+		renderer.setBaseShapesVisible(true);
+		renderer.setBaseShapesFilled(true);
+		renderer.setBaseStroke(new BasicStroke(2.0f));
 
 		// label the points
 		NumberFormat format = NumberFormat.getNumberInstance();
 		format.setMaximumFractionDigits(2);
 		XYItemLabelGenerator generator = new StandardXYItemLabelGenerator(
 				StandardXYItemLabelGenerator.DEFAULT_ITEM_LABEL_FORMAT, format, format);
-		r.setBaseItemLabelGenerator(generator);
-		r.setBaseItemLabelsVisible(true);
+		renderer.setBaseItemLabelGenerator(generator);
+		renderer.setBaseItemLabelsVisible(true);
+		plot.setRenderer(renderer);
 		ValueAxis axis = plot.getDomainAxis();
 		axis.setAutoRange(true);
 		axis.setFixedAutoRange(600000.0);

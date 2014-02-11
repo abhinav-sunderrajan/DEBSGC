@@ -2,6 +2,8 @@ package bolts;
 
 import java.util.Map;
 
+import org.apache.log4j.Logger;
+
 import utils.EsperQueries;
 import backtype.storm.task.OutputCollector;
 import backtype.storm.task.TopologyContext;
@@ -30,7 +32,9 @@ public class PerHouseMedianBolt implements IRichBolt {
 	private Configuration cepConfig;
 	private EPRuntime cepRT;
 	private OutputCollector _collector;
+	private static final Logger LOGGER = Logger.getLogger(PerHouseMedianBolt.class);
 	private Fields outFields;
+	private static long count = 0;
 
 	public PerHouseMedianBolt(Fields fields) {
 		outFields = fields;
@@ -86,9 +90,14 @@ public class PerHouseMedianBolt implements IRichBolt {
 	public void update(Double medianLoad, Double globalMedian, Long timestampStart,
 			Long timestampEnd, Long queryEvalTime, Integer houseId, Integer householdId,
 			Integer plugId) {
+		if (count % 1000 == 0) {
+			LOGGER.info("median at plug " + houseId + "_" + "_" + householdId + "_" + plugId
+					+ " is " + medianLoad);
+		}
+
 		_collector.emit(new Values(medianLoad, globalMedian, timestampStart, timestampEnd,
 				queryEvalTime, houseId, householdId, plugId));
+		count++;
 
 	}
-
 }

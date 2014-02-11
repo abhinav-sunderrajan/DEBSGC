@@ -34,6 +34,10 @@ public class LiveStreamSpout<E> extends BaseRichSpout {
 	private SpoutOutputCollector _collector;
 	private static final boolean _isDistributed = false;
 	private Fields outFields;
+	private int streamRate;
+	private String writeFileDir;
+	private String imageSaveDirectory;
+	private int port;
 
 	/**
 	 * 
@@ -54,17 +58,21 @@ public class LiveStreamSpout<E> extends BaseRichSpout {
 		this.buffer = buffer;
 		this.monitor = monitor;
 		this.outFields = outFields;
-
-		// Fire up the netty server to listen to streams at the given port.
-		NettyServer<E> server = new NettyServer<E>((ConcurrentLinkedQueue<E>) buffer, streamRate,
-				writeFileDir, imageSaveDirectory);
-		server.listen(port);
+		this.streamRate = streamRate;
+		this.writeFileDir = writeFileDir;
+		this.port = port;
+		this.imageSaveDirectory = imageSaveDirectory;
 
 	}
 
 	@Override
 	public void open(Map conf, TopologyContext context, SpoutOutputCollector collector) {
 		_collector = collector;
+
+		// Fire up the netty server to listen to streams at the given port.
+		NettyServer<E> server = new NettyServer<E>((ConcurrentLinkedQueue<E>) buffer, streamRate,
+				writeFileDir, imageSaveDirectory);
+		server.listen(port);
 
 	}
 
@@ -81,11 +89,6 @@ public class LiveStreamSpout<E> extends BaseRichSpout {
 			E obj = buffer.poll();
 			if (obj instanceof SmartPlugBean) {
 				SmartPlugBean bean = (SmartPlugBean) obj;
-				// If bean is a punctuation indicating the end of
-				if (bean.getId() == -1) {
-
-				}
-
 				_collector.emit(new Values(bean, bean.getHouseId(), bean.getHouseholdId(), bean
 						.getPlugId()));
 			}

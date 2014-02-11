@@ -1,6 +1,9 @@
 package bolts;
 
+import java.sql.Timestamp;
 import java.util.Map;
+
+import org.apache.log4j.Logger;
 
 import backtype.storm.topology.OutputFieldsDeclarer;
 import backtype.storm.tuple.Fields;
@@ -18,6 +21,8 @@ public class GlobalMedianLoadBolt extends EsperEnrichedBolt {
 	 */
 	private static final long serialVersionUID = 1L;
 	private Fields outputFields;
+	private static final Logger LOGGER = Logger.getLogger(GlobalMedianLoadBolt.class);
+	private static int count = 0;
 
 	/**
 	 * 
@@ -54,11 +59,15 @@ public class GlobalMedianLoadBolt extends EsperEnrichedBolt {
 	}
 
 	public void update(Double median, Long queryEvalTime, SmartPlugBean bean) {
+		if (count % 1000 == 0) {
+			LOGGER.info("Global median is " + median + " at:" + new Timestamp(bean.getTimestamp()));
+		}
+
 		bean.setGlobalMedian(median);
 		bean.setQueryEvalTime(queryEvalTime);
 		_collector
 				.emit(new Values(bean, bean.getHouseId(), bean.getHouseholdId(), bean.getPlugId()));
+		count++;
 
 	}
-
 }
