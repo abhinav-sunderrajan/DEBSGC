@@ -28,10 +28,10 @@ public class PerHouseMedianBolt implements IRichBolt {
 	 * 
 	 */
 	private static final long serialVersionUID = 1L;
-	private EPServiceProvider cep;
-	private EPAdministrator cepAdm;
-	private Configuration cepConfig;
-	private EPRuntime cepRT;
+	private transient EPServiceProvider cep;
+	private transient EPAdministrator cepAdm;
+	private transient Configuration cepConfig;
+	private transient EPRuntime cepRT;
 	private OutputCollector _collector;
 	private Fields outFields;
 	private static long count = 0;

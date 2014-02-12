@@ -4,6 +4,9 @@ import java.text.ParseException;
 import java.util.Map;
 
 import main.PlatformCore;
+
+import org.apache.log4j.Logger;
+
 import backtype.storm.task.OutputCollector;
 import backtype.storm.task.TopologyContext;
 import backtype.storm.topology.IRichBolt;
@@ -27,13 +30,14 @@ public class CurrentLoadAvgPerHouseBolt implements IRichBolt {
 	 * 
 	 */
 	private static final long serialVersionUID = 1L;
-	private EPServiceProvider cep;
-	private EPAdministrator cepAdm;
-	private Configuration cepConfig;
-	private EPRuntime cepRT;
+	private transient EPServiceProvider cep;
+	private transient EPAdministrator cepAdm;
+	private transient Configuration cepConfig;
+	private transient EPRuntime cepRT;
 	private OutputCollector _collector;
 	private long avgCalcInterval;
 	private Fields outFields;
+	private static final Logger LOGGER = Logger.getLogger(CurrentLoadAvgPerHouseBolt.class);
 
 	/**
 	 * Initialize with the size of the window for calculating the current
@@ -49,7 +53,6 @@ public class CurrentLoadAvgPerHouseBolt implements IRichBolt {
 	}
 
 	public void update(Integer houseId, Double averageLoad, Long timestamp, Long evaluationTime) {
-
 		_collector.emit(new Values(houseId, new CurrentLoadPerHouseBean(houseId.shortValue(),
 				averageLoad, timestamp, evaluationTime)));
 	}
@@ -59,7 +62,8 @@ public class CurrentLoadAvgPerHouseBolt implements IRichBolt {
 		_collector = collector;
 		cepConfig = new Configuration();
 		cepConfig.getEngineDefaults().getThreading().setListenerDispatchPreserveOrder(false);
-		cep = EPServiceProviderManager.getProvider("CurrentLoadAvgPerHouseBolt", cepConfig);
+		cep = EPServiceProviderManager.getProvider("CurrentLoadAvgPerHouseBolt_" + this.hashCode(),
+				cepConfig);
 		cepConfig.addEventType("SmartPlugBean", SmartPlugBean.class.getName());
 		cepRT = cep.getEPRuntime();
 		cepAdm = cep.getEPAdministrator();

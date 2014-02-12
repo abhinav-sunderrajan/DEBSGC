@@ -34,10 +34,10 @@ public class CurrentLoadAvgPerPlugBolt implements IRichBolt {
 	 * 
 	 */
 	private static final long serialVersionUID = 1L;
-	private EPServiceProvider cep;
-	private EPAdministrator cepAdm;
-	private Configuration cepConfig;
-	private EPRuntime cepRT;
+	private transient EPServiceProvider cep;
+	private transient EPAdministrator cepAdm;
+	private transient Configuration cepConfig;
+	private transient EPRuntime cepRT;
 	private OutputCollector _collector;
 	private long avgCalcInterval;
 	private Fields outFields;

@@ -68,15 +68,17 @@ public class DatabaseAccess {
 	 * @return
 	 */
 	public ResultSet retrieveQueryResult(String queryString) {
+		System.out.println(queryString);
 
 		ResultSet resultSet = null;
 		try {
 			PreparedStatement preparedStatement = (PreparedStatement) connect
 					.prepareStatement(queryString);
-			preparedStatement.setFetchSize(Integer.MIN_VALUE);
+			// preparedStatement.setFetchSize(Integer.MIN_VALUE);
 			resultSet = preparedStatement.executeQuery();
 		} catch (SQLException e) {
-			LOGGER.error("Error retrieving result set. Please check the query", e);
+			LOGGER.error(queryString);
+			LOGGER.error("Error retrieving result set. Please check the logged query", e);
 
 		}
 		return resultSet;
@@ -94,7 +96,7 @@ public class DatabaseAccess {
 			preparedStatement.execute();
 
 		} catch (SQLException e) {
-			LOGGER.error("Error while executing the DDL statement", e);
+			LOGGER.error("Error while executing the DDL statement\n" + queryString, e);
 
 		}
 	}

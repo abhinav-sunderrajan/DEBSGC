@@ -1,6 +1,7 @@
 package bolts;
 
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import main.PlatformCore;
 
@@ -15,6 +16,7 @@ import backtype.storm.topology.OutputFieldsDeclarer;
 import backtype.storm.tuple.Fields;
 import backtype.storm.tuple.Tuple;
 import backtype.storm.tuple.Values;
+import backtype.storm.utils.Utils;
 import beans.HistoryBean;
 
 public class ArchiveMedianPerPlugBolt implements IRichBolt {
@@ -46,24 +48,46 @@ public class ArchiveMedianPerPlugBolt implements IRichBolt {
 	public void execute(Tuple input) {
 
 		HistoryBean bean = (HistoryBean) input.getValue(0);
-		final short houseId = input.getShort(1);
-		final short householdId = input.getShort(2);
-		final short plugId = input.getShort(3);
-		String timeSlice = input.getString(4);
+		if (bean.getHouseId() != -1) {
+			final short houseId = input.getShort(1);
+			final short householdId = input.getShort(2);
+			final short plugId = input.getShort(3);
+			String timeSlice = input.getString(4);
 
-		_collector.emit(new Values(bean, houseId, timeSlice));
+			_collector.emit(new Values(bean, houseId, timeSlice));
 
-		if (!PlatformCore.averageLoadPerPlugPerTimeSlice.get(
-				houseId + "_" + householdId + "_" + plugId).containsKey(timeSlice)) {
-			Buffer medianList = BufferUtils.synchronizedBuffer(new CircularFifoBuffer(
-					PlatformCore.NUMBER_OF_ARCHIVE_STREAMS));
-			medianList.add(bean.getAverageLoad());
-			PlatformCore.averageLoadPerPlugPerTimeSlice.get(
-					houseId + "_" + householdId + "_" + plugId).put(timeSlice, medianList);
+			if (PlatformCore.averageLoadPerPlugPerTimeSlice.containsKey(houseId + "_" + householdId
+					+ "_" + plugId)) {
+
+				if (!PlatformCore.averageLoadPerPlugPerTimeSlice.get(
+						houseId + "_" + householdId + "_" + plugId).containsKey(timeSlice)) {
+					Buffer medianList = BufferUtils.synchronizedBuffer(new CircularFifoBuffer(
+							PlatformCore.NUMBER_OF_ARCHIVE_STREAMS));
+					medianList.add(bean.getAverageLoad());
+					PlatformCore.averageLoadPerPlugPerTimeSlice.get(
+							houseId + "_" + householdId + "_" + plugId).put(timeSlice, medianList);
+				} else {
+					Buffer medianList = PlatformCore.averageLoadPerPlugPerTimeSlice.get(
+							houseId + "_" + householdId + "_" + plugId).get(timeSlice);
+					medianList.add(bean.getAverageLoad());
+				}
+
+			} else {
+
+				ConcurrentHashMap<String, Buffer> bufferMap = new ConcurrentHashMap<String, Buffer>();
+				PlatformCore.averageLoadPerPlugPerTimeSlice.put(houseId + "_" + householdId + "_"
+						+ plugId, bufferMap);
+				Buffer medianList = BufferUtils.synchronizedBuffer(new CircularFifoBuffer(
+						PlatformCore.NUMBER_OF_ARCHIVE_STREAMS));
+				medianList.add(bean.getAverageLoad());
+				PlatformCore.averageLoadPerPlugPerTimeSlice.get(
+						houseId + "_" + householdId + "_" + plugId).put(timeSlice, medianList);
+
+			}
 		} else {
-			Buffer medianList = PlatformCore.averageLoadPerPlugPerTimeSlice.get(
-					houseId + "_" + householdId + "_" + plugId).get(timeSlice);
-			medianList.add(bean.getAverageLoad());
+			Utils.sleep(1000);
+			_collector.emit(new Values(bean, bean.getHouseId(), bean.getTimeSlice()));
+
 		}
 
 	}

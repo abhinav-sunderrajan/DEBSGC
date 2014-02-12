@@ -27,7 +27,6 @@ public class Query2AOutlierEstimator implements IRichBolt {
 	private Fields outFields;
 	private static Calendar cal = Calendar.getInstance();
 	private static DateFormat df;
-	private static int count = 0;
 	private static final Logger LOGGER = Logger.getLogger(Query2AOutlierEstimator.class);
 
 	public Query2AOutlierEstimator(Fields fields) {

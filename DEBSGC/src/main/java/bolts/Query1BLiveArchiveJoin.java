@@ -25,7 +25,7 @@ public class Query1BLiveArchiveJoin implements IRichBolt {
 	private static final long serialVersionUID = 1L;
 	private static Calendar cal = Calendar.getInstance();
 	private OutputCollector _collector;
-	private DescriptiveStatistics stats = new DescriptiveStatistics();
+	private transient DescriptiveStatistics stats = new DescriptiveStatistics();
 	private Fields outFields;
 
 	public Query1BLiveArchiveJoin(Fields outFields) {

@@ -25,7 +25,7 @@ public class Query1ALiveArchiveJoin implements IRichBolt {
 	private static final long serialVersionUID = 1L;
 	private static Calendar cal = Calendar.getInstance();
 	private OutputCollector _collector;
-	private DescriptiveStatistics stats = new DescriptiveStatistics();
+	private transient DescriptiveStatistics stats = new DescriptiveStatistics();
 	private Fields outFields;
 
 	@Override
@@ -41,7 +41,7 @@ public class Query1ALiveArchiveJoin implements IRichBolt {
 	@Override
 	public void execute(Tuple input) {
 
-		CurrentLoadPerHouseBean currentLoad = (CurrentLoadPerHouseBean) input.getValue(0);
+		CurrentLoadPerHouseBean currentLoad = (CurrentLoadPerHouseBean) input.getValue(1);
 		cal.setTimeInMillis(currentLoad.getCurrTime() + 2 * PlatformCore.SLICE_IN_MINUTES * 60
 				* 1000);
 		int hrs = cal.get(Calendar.HOUR);
@@ -58,14 +58,17 @@ public class Query1ALiveArchiveJoin implements IRichBolt {
 		String key = predTimeStart + " TO " + predTimeEnd;
 		Buffer values = PlatformCore.averageLoadPerHousePerTimeSlice.get(currentLoad.getHouseId())
 				.get(key);
-		for (Object obj : values) {
-			stats.addValue((double) obj);
-		}
+		System.out.println(key);
+		if (values != null) {
+			for (Object obj : values) {
+				stats.addValue((double) obj);
+			}
+			_collector.emit(new Values(currentLoad.getHouseId(), currentLoad
+					.getCurrentAverageLoad(), (stats.getPercentile(50) + currentLoad
+					.getCurrentAverageLoad()) / 2.0, key, currentLoad.getEvaluationTime()));
+			stats.clear();
 
-		_collector.emit(new Values(currentLoad.getHouseId(), currentLoad.getCurrentAverageLoad(),
-				(stats.getPercentile(50) + currentLoad.getCurrentAverageLoad()) / 2.0, key,
-				currentLoad.getEvaluationTime()));
-		stats.clear();
+		}
 
 	}
 

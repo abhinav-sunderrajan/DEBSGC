@@ -63,7 +63,8 @@ public abstract class EsperEnrichedBolt implements IRichBolt {
 		_collector = collector;
 		cepConfig = new Configuration();
 		cepConfig.getEngineDefaults().getThreading().setListenerDispatchPreserveOrder(false);
-		cep = EPServiceProviderManager.getProvider(esperEngineName, cepConfig);
+		cep = EPServiceProviderManager.getProvider(esperEngineName + "_" + this.hashCode(),
+				cepConfig);
 
 		for (int i = 0; i < eventTypes.length; i++) {
 			String[] split = eventTypes[i].split("\\.");

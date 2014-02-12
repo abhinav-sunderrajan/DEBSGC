@@ -15,13 +15,12 @@ import beans.HistoryBean;
 
 public class ArchiveLoader<T> implements Runnable {
 	private Queue<T> buffer;
-	protected DatabaseAccess dbconnect;
+	protected DatabaseAccess dbconnect = new DatabaseAccess();
 	protected Object monitor;
 	private long startTime;
 	private long endTime;
 	private int count;
-	private Calendar calStart;
-	private Calendar calEnd;
+	private Calendar cal;
 	private static final Logger LOGGER = Logger.getLogger(ArchiveLoader.class);
 
 	/**
@@ -37,40 +36,50 @@ public class ArchiveLoader<T> implements Runnable {
 		this.monitor = monitor;
 		this.startTime = startTime;
 		this.endTime = startTime + (PlatformCore.SLICE_IN_MINUTES * 60 * 1000);
-		calStart = Calendar.getInstance();
-		calEnd = Calendar.getInstance();
+		cal = Calendar.getInstance();
 	}
 
 	@Override
 	public void run() {
 		ResultSet rs = dbconnect
-				.retrieveQueryResult("SELECT AVG(value) AS avgLoad, house_id,household_id,plug_id FROM sensor_data "
-						+ "WHERE time_stamp >="
+				.retrieveQueryResult("SELECT AVG(value) AS avgLoad, count(*) as counts,house_id,household_id"
+						+ ",plug_id FROM sensor_data_archive WHERE time_stamp >="
 						+ startTime
 						+ " AND time_stamp < "
 						+ endTime
-						+ "AND property="
+						+ " AND property="
 						+ PlatformCore.LOAD_PROPERTY
-						+ " GROUP BY house_id,household_id,plug_id");
+						+ " GROUP BY house_id,household_id,plug_id ORDER BY house_id,household_id,plug_id");
 		try {
+			String timeSlice = null;
 			while (rs.next()) {
 
 				HistoryBean bean = new HistoryBean();
 				bean.setAverageLoad(rs.getFloat("avgLoad"));
+				bean.setReadingsCount(rs.getInt("counts"));
 				bean.setHouseId(rs.getShort("house_id"));
 				bean.setHouseholdId(rs.getShort("household_id"));
 				bean.setPlugId(rs.getShort("plug_id"));
-				calStart.setTimeInMillis(startTime);
-				calEnd.setTimeInMillis(endTime);
-				String timeSlice = calStart.get(Calendar.HOUR_OF_DAY) + ":"
-						+ calStart.get(Calendar.MINUTE) + ":" + calStart.get(Calendar.SECOND)
-						+ " TO " + calEnd.get(Calendar.HOUR_OF_DAY) + ":"
-						+ calEnd.get(Calendar.MINUTE) + ":" + calEnd.get(Calendar.SECOND);
 
+				cal.setTimeInMillis(startTime);
+				int hrs = cal.get(Calendar.HOUR);
+				int mnts = cal.get(Calendar.MINUTE);
+				int secs = cal.get(Calendar.SECOND);
+				String predTimeStart = String.format("%02d:%02d:%02d", hrs, mnts, secs);
+				cal.setTimeInMillis(endTime);
+				hrs = cal.get(Calendar.HOUR);
+				mnts = cal.get(Calendar.MINUTE);
+				secs = cal.get(Calendar.SECOND);
+				String predTimeEnd = String.format("%02d:%02d:%02d", hrs, mnts, secs);
+				timeSlice = predTimeStart + " TO " + predTimeEnd;
 				bean.setTimeSlice(timeSlice);
 				buffer.add((T) bean);
 
 			}
+			// Create a punctuation event after each database load
+			HistoryBean punctuation = new HistoryBean((short) -1, (short) -1, (short) -1, 0.0f, 1,
+					timeSlice);
+			buffer.add((T) punctuation);
 
 			if (count == 2) {
 				synchronized (monitor) {
@@ -91,5 +100,4 @@ public class ArchiveLoader<T> implements Runnable {
 		}
 
 	}
-
 }

@@ -1,12 +1,14 @@
 package bolts;
 
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import main.PlatformCore;
 
 import org.apache.commons.collections.Buffer;
 import org.apache.commons.collections.BufferUtils;
 import org.apache.commons.collections.buffer.CircularFifoBuffer;
+import org.apache.log4j.Logger;
 
 import backtype.storm.task.OutputCollector;
 import backtype.storm.task.TopologyContext;
@@ -28,45 +30,63 @@ public class ArchiveMedianPerHouseBolt implements IRichBolt {
 	 * 
 	 */
 	private static final long serialVersionUID = 1L;
-	private EPServiceProvider cep;
-	private EPAdministrator cepAdm;
-	private Configuration cepConfig;
-	private EPRuntime cepRT;
-	private OutputCollector _collector;
+	private transient EPServiceProvider cep;
+	private transient EPAdministrator cepAdm;
+	private transient Configuration cepConfig;
+	private transient EPRuntime cepRT;
+	private static final Logger LOGGER = Logger.getLogger(ArchiveMedianPerHouseBolt.class);
 
-	public void update(Float averageLoad, Short houseId, String timeSlice) {
-		if (!PlatformCore.averageLoadPerHousePerTimeSlice.get(houseId).containsKey(timeSlice)) {
+	@SuppressWarnings("unchecked")
+	public void update(Short houseId, String timeSlice, Double averageLoad) {
+
+		LOGGER.info("houseId:" + houseId + " time:" + timeSlice + " load:" + averageLoad);
+		if (PlatformCore.averageLoadPerPlugPerTimeSlice.containsKey(houseId)) {
+			if (!PlatformCore.averageLoadPerHousePerTimeSlice.get(houseId).containsKey(timeSlice)) {
+				Buffer medianList = BufferUtils.synchronizedBuffer(new CircularFifoBuffer(
+						PlatformCore.NUMBER_OF_DAYS_IN_ARCHIVE));
+				medianList.add(averageLoad);
+				PlatformCore.averageLoadPerHousePerTimeSlice.get(houseId)
+						.put(timeSlice, medianList);
+			} else {
+				Buffer medianList = PlatformCore.averageLoadPerHousePerTimeSlice.get(houseId).get(
+						timeSlice);
+				medianList.add(averageLoad);
+			}
+		} else {
+
+			ConcurrentHashMap<String, Buffer> bufferMap = new ConcurrentHashMap<String, Buffer>();
+			PlatformCore.averageLoadPerHousePerTimeSlice.put(houseId, bufferMap);
 			Buffer medianList = BufferUtils.synchronizedBuffer(new CircularFifoBuffer(
 					PlatformCore.NUMBER_OF_ARCHIVE_STREAMS));
 			medianList.add(averageLoad);
 			PlatformCore.averageLoadPerHousePerTimeSlice.get(houseId).put(timeSlice, medianList);
-		} else {
-			Buffer medianList = PlatformCore.averageLoadPerHousePerTimeSlice.get(houseId).get(
-					timeSlice);
-			medianList.add(averageLoad);
+
 		}
 
 	}
 
 	@Override
 	public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
-		_collector = collector;
 		cepConfig = new Configuration();
 		cepConfig.getEngineDefaults().getThreading().setListenerDispatchPreserveOrder(false);
-		cep = EPServiceProviderManager.getProvider("ArchiveMedianPerHouseBolt", cepConfig);
+		cep = EPServiceProviderManager.getProvider("ArchiveMedianPerHouseBolt_" + this.hashCode(),
+				cepConfig);
 		cepConfig.addEventType("HistoryBean", HistoryBean.class.getName());
 		cepRT = cep.getEPRuntime();
 		cepAdm = cep.getEPAdministrator();
-		EPStatement cepStatement = cepAdm
-				.createEPL("SELECT houseId,timeSlice,average from HistoryBean.std:groupwin(houseId)"
-						+ ".win:time_batch(10 sec).stat:weighted_avg(averageLoad,readingsCount) group by houseId");
+
+		EPStatement cepStatement = cepAdm.createEPL("SELECT houseId,timeSlice,average FROM "
+				+ "beans.HistoryBean.win:expr_batch(houseId=-1,false)"
+				+ ".std:groupwin(houseId,timeSlice).stat:weighted_avg(averageLoad,readingsCount) "
+				+ "group by houseId,timeSlice");
 		cepStatement.setSubscriber(this);
 
 	}
 
 	@Override
 	public void execute(Tuple input) {
-		cepRT.sendEvent(input.getValue(0));
+		HistoryBean bean = (HistoryBean) input.getValue(0);
+		cepRT.sendEvent(bean);
 
 	}
 

@@ -19,6 +19,13 @@ public class CurrentLoadPerHouseBean implements Serializable {
 	private Long currTime;
 	private Long evaluationTime;
 
+	/**
+	 * 
+	 * @param houseId
+	 * @param currentAverageLoad
+	 * @param currTime
+	 * @param evaluationTime
+	 */
 	public CurrentLoadPerHouseBean(short houseId, double currentAverageLoad, Long currTime,
 			Long evaluationTime) {
 		super();

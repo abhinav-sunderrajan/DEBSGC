@@ -22,6 +22,19 @@ public class HistoryBean implements Serializable {
 	private int readingsCount;
 	private String timeSlice;
 
+	public HistoryBean() {
+	}
+
+	public HistoryBean(short houseId, short householdId, short plugId, float averageLoad,
+			int readingsCount, String timeSlice) {
+		this.houseId = houseId;
+		this.householdId = householdId;
+		this.plugId = plugId;
+		this.averageLoad = averageLoad;
+		this.readingsCount = readingsCount;
+		this.timeSlice = timeSlice;
+	}
+
 	public short getHouseId() {
 		return houseId;
 	}
