@@ -41,8 +41,8 @@ public class TimeSeriesDisplay extends GenericChartDisplay {
 		super(title, imageSaveDirectory);
 		this.dataset = dataset;
 		timeSeriesMap = new HashMap<Integer, TimeSeries>();
-		chart = ChartFactory.createTimeSeriesChart(title, "Time", "Value", dataset, true, true,
-				false);
+		setChart(ChartFactory.createTimeSeriesChart(title, "Time", "Value", dataset, true, true,
+				false));
 		settings();
 	}
 
@@ -74,11 +74,11 @@ public class TimeSeriesDisplay extends GenericChartDisplay {
 	@Override
 	protected void settings() {
 
-		chartPanel = new ChartPanel(chart);
+		chartPanel = new ChartPanel(getChart());
 		chartPanel.setPreferredSize(new java.awt.Dimension(1000, 500));
 		chartPanel.setMouseZoomable(true, false);
 		setContentPane(chartPanel);
-		XYPlot plot = chart.getXYPlot();
+		XYPlot plot = getChart().getXYPlot();
 		plot.setBackgroundPaint(Color.WHITE);
 		plot.setAxisOffset(new RectangleInsets(3.0, 3.0, 3.0, 3.0));
 		plot.setDomainCrosshairVisible(true);

@@ -35,9 +35,9 @@ public class DisplayBoltQuery2 implements IRichBolt {
 	private Map<Integer, Double> valueMap;
 	private AtomicLong timer;
 	private boolean throughputFlag;
-	private BarChartDisplay valuesOutput;
+	private BarChartDisplay barchart;
 	public final String PERCENTAGE_PLUGS = "PERCENTAGE_PLUGS";
-	private HashMap<String, Double> barchartDisplayMap;
+	private HashMap<String, Double> barchartValuesMap;
 
 	@SuppressWarnings("deprecation")
 	@Override
@@ -45,17 +45,16 @@ public class DisplayBoltQuery2 implements IRichBolt {
 		display = StreamJoinDisplay.getInstance("Join Performance Measure",
 				PlatformCore.configProperties.getProperty("image.save.directory"));
 
-		valuesOutput = new BarChartDisplay("Outlier Detection", "House ID",
+		barchart = new BarChartDisplay("Outlier Detection", "House ID",
 				"% Plugs above global median",
 				PlatformCore.configProperties.getProperty("image.save.directory"),
 				new DefaultCategoryDataset());
-		barchartDisplayMap = new HashMap<String, Double>();
-		barchartDisplayMap.put(PERCENTAGE_PLUGS, 0.0);
+		barchartValuesMap = new HashMap<String, Double>();
+		barchartValuesMap.put(PERCENTAGE_PLUGS, 0.0);
 
 		for (short i = 0; i < 40; i++) {
-			for (Entry<String, Double> entry : barchartDisplayMap.entrySet()) {
-				valuesOutput.getDataset().addValue(entry.getValue(), entry.getKey(),
-						String.valueOf(i));
+			for (Entry<String, Double> entry : barchartValuesMap.entrySet()) {
+				barchart.getDataset().addValue(entry.getValue(), entry.getKey(), String.valueOf(i));
 			}
 
 		}
@@ -74,26 +73,34 @@ public class DisplayBoltQuery2 implements IRichBolt {
 
 	@Override
 	public void execute(Tuple input) {
-		if (throughputFlag) {
-			timer.set(Calendar.getInstance().getTimeInMillis());
-			numOfMsgsin30Sec = count;
-		}
-		count++;
-		throughputFlag = false;
-		barchartDisplayMap.put(PERCENTAGE_PLUGS, round(input.getDouble(2), 2));
-		valuesOutput.refreshDisplayValues(input.getInteger(1), barchartDisplayMap,
-				input.getString(0));
-		// Refresh display values every 30 seconds
-		if ((Calendar.getInstance().getTimeInMillis() - timer.get()) >= 30000) {
-			double throughput = (1000 * (count - numOfMsgsin30Sec))
-					/ (Calendar.getInstance().getTimeInMillis() - timer.get());
-			latency = input.getLong(3);
-			valueMap.put((1 + this.hashCode()), latency / 1.0);
-			valueMap.put((2 + this.hashCode()), throughput);
-			display.refreshDisplayValues(valueMap);
-			throughputFlag = true;
-		}
 
+		Long queryLat = input.getLong(3);
+		Double percentage = input.getDouble(2);
+		Integer houseId = input.getInteger(1);
+		String time = input.getString(0);
+		if (queryLat == null || percentage == null || time == null) {
+			barchart.getChart().setTitle("Outlier Detection " + time);
+		} else {
+
+			if (throughputFlag) {
+				timer.set(Calendar.getInstance().getTimeInMillis());
+				numOfMsgsin30Sec = count;
+			}
+			count++;
+			throughputFlag = false;
+			barchartValuesMap.put(PERCENTAGE_PLUGS, round(percentage, 2));
+			barchart.refreshDisplayValues(houseId, barchartValuesMap, time);
+			// Refresh display values every 30 seconds
+			if ((Calendar.getInstance().getTimeInMillis() - timer.get()) >= 30000) {
+				double throughput = (1000 * (count - numOfMsgsin30Sec))
+						/ (Calendar.getInstance().getTimeInMillis() - timer.get());
+				latency = queryLat;
+				valueMap.put((1 + this.hashCode()), latency / 1.0);
+				valueMap.put((2 + this.hashCode()), throughput);
+				display.refreshDisplayValues(valueMap);
+				throughputFlag = true;
+			}
+		}
 	}
 
 	@Override

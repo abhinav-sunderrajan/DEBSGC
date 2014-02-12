@@ -49,7 +49,7 @@ public class BarChartDisplay extends GenericChartDisplay {
 		this.yAxisLabel = yAxisLabel;
 
 		settings();
-		chartPanel = new ChartPanel(chart);
+		chartPanel = new ChartPanel(getChart());
 		chartPanel.setPreferredSize(new Dimension(1024, 600));
 		setContentPane(chartPanel);
 
@@ -70,7 +70,7 @@ public class BarChartDisplay extends GenericChartDisplay {
 	public synchronized void refreshDisplayValues(int houseId, Map<String, Double> rowValues,
 			String predictedTime) {
 
-		chart.setTitle(title + " " + predictedTime);
+		getChart().setTitle(title + " " + predictedTime);
 		for (Entry<String, Double> entry : rowValues.entrySet()) {
 			this.getDataset().setValue(entry.getValue(), entry.getKey(), String.valueOf(houseId));
 		}
@@ -79,7 +79,7 @@ public class BarChartDisplay extends GenericChartDisplay {
 
 	@Override
 	protected void settings() {
-		chart = ChartFactory.createBarChart(title, // chart title
+		setChart(ChartFactory.createBarChart(title, // chart title
 				xAxisLabel, // domain axis label
 				yAxisLabel, // range axis label
 				getDataset(), // data
@@ -87,11 +87,11 @@ public class BarChartDisplay extends GenericChartDisplay {
 				true, // include legend
 				true, // tooltips?
 				false // URLs?
-				);
-		chart.setBackgroundPaint(Color.white);
+				));
+		getChart().setBackgroundPaint(Color.white);
 
 		// get a reference to the plot for further customisation...
-		final CategoryPlot plot = chart.getCategoryPlot();
+		final CategoryPlot plot = getChart().getCategoryPlot();
 		plot.setBackgroundPaint(Color.WHITE);
 		plot.setDomainGridlinePaint(Color.LIGHT_GRAY);
 		plot.setRangeGridlinePaint(Color.LIGHT_GRAY);

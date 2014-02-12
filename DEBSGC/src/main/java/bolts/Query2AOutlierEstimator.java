@@ -1,10 +1,15 @@
 package bolts;
 
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import main.PlatformCore;
+
+import org.apache.log4j.Logger;
+
 import backtype.storm.task.OutputCollector;
 import backtype.storm.task.TopologyContext;
 import backtype.storm.topology.IRichBolt;
@@ -21,6 +26,9 @@ public class Query2AOutlierEstimator implements IRichBolt {
 	private OutputCollector _collector;
 	private Fields outFields;
 	private static Calendar cal = Calendar.getInstance();
+	private static DateFormat df;
+	private static int count = 0;
+	private static final Logger LOGGER = Logger.getLogger(Query2AOutlierEstimator.class);
 
 	public Query2AOutlierEstimator(Fields fields) {
 		outFields = fields;
@@ -29,6 +37,7 @@ public class Query2AOutlierEstimator implements IRichBolt {
 	@Override
 	public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
 		_collector = collector;
+		df = new SimpleDateFormat("dd-MMM-yyyy HH:mm:ss");
 
 	}
 
@@ -45,16 +54,11 @@ public class Query2AOutlierEstimator implements IRichBolt {
 		Integer plugId = input.getInteger(7);
 
 		cal.setTimeInMillis(timestampStart);
-		int hrs = cal.get(Calendar.HOUR);
-		int mnts = cal.get(Calendar.MINUTE);
-		int secs = cal.get(Calendar.SECOND);
-		String timeStart = String.format("%02d:%02d:%02d", hrs, mnts, secs);
-		cal.setTimeInMillis(timestampEnd);
-		hrs = cal.get(Calendar.HOUR);
-		mnts = cal.get(Calendar.MINUTE);
-		secs = cal.get(Calendar.SECOND);
-		String timeEnd = String.format("%02d:%02d:%02d", hrs, mnts, secs);
 
+		String timeStart = df.format(cal.getTime());
+		cal.setTimeInMillis(timestampEnd);
+
+		String timeEnd = df.format(cal.getTime());
 		String timeFrame = timeStart + " TO " + timeEnd;
 
 		ConcurrentHashMap<String, Boolean> plugIdMap;
@@ -67,9 +71,14 @@ public class Query2AOutlierEstimator implements IRichBolt {
 				// Calculate change in percentage if and only if there is a
 				// change.
 				if (plugIdMap.get(householdId + "-" + plugId) != isgreater) {
+					// Update the change before calculating the percentage
+					// change.
+					plugIdMap.put(householdId + "-" + plugId, isgreater);
 					double percentage = calculatePercentagePlugsGreater(plugIdMap);
 					_collector.emit(new Values(timeFrame, houseId, percentage, (System
 							.currentTimeMillis() - queryEvalTime)));
+				} else {
+					_collector.emit(new Values(timeFrame, null, null, null));
 				}
 			} else {
 				plugIdMap.put(householdId + "-" + plugId, isgreater);
@@ -80,13 +89,14 @@ public class Query2AOutlierEstimator implements IRichBolt {
 		} else {
 			plugIdMap = new ConcurrentHashMap<String, Boolean>();
 			plugIdMap.put(householdId + "-" + plugId, isgreater);
+			PlatformCore.loadStatusMap.put(houseId.shortValue(), plugIdMap);
 			if (isgreater) {
 				_collector.emit(new Values(timeFrame, houseId, 100.0,
 						(System.currentTimeMillis() - queryEvalTime)));
+			} else {
+				_collector.emit(new Values(timeFrame, null, null, null));
 			}
 		}
-
-		PlatformCore.loadStatusMap.put(houseId.shortValue(), plugIdMap);
 
 	}
 

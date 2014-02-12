@@ -30,7 +30,7 @@ import org.w3c.dom.Document;
  */
 public abstract class GenericChartDisplay extends ApplicationFrame {
 
-	protected JFreeChart chart;
+	private JFreeChart chart;
 	protected ChartPanel chartPanel;
 	protected String title;
 	protected static Object lock;
@@ -58,6 +58,14 @@ public abstract class GenericChartDisplay extends ApplicationFrame {
 	 */
 	protected abstract void settings();
 
+	public JFreeChart getChart() {
+		return chart;
+	}
+
+	public void setChart(JFreeChart chart) {
+		this.chart = chart;
+	}
+
 	private class LazySave implements Runnable {
 		DateFormat df;
 
@@ -76,7 +84,7 @@ public abstract class GenericChartDisplay extends ApplicationFrame {
 			SVGGraphics2D svgGenerator = new SVGGraphics2D(document);
 
 			// draw the chart in the SVG generator
-			chart.draw(svgGenerator, new Rectangle2D.Double(0, 0, 1024, 600));
+			getChart().draw(svgGenerator, new Rectangle2D.Double(0, 0, 1024, 600));
 
 			// Write svg file
 			OutputStream outputStream;

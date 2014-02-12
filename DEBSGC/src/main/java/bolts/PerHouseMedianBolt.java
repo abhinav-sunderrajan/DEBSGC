@@ -1,5 +1,6 @@
 package bolts;
 
+import java.sql.Timestamp;
 import java.util.Map;
 
 import org.apache.log4j.Logger;
@@ -32,9 +33,9 @@ public class PerHouseMedianBolt implements IRichBolt {
 	private Configuration cepConfig;
 	private EPRuntime cepRT;
 	private OutputCollector _collector;
-	private static final Logger LOGGER = Logger.getLogger(PerHouseMedianBolt.class);
 	private Fields outFields;
 	private static long count = 0;
+	private static final Logger LOGGER = Logger.getLogger(PerHouseMedianBolt.class);
 
 	public PerHouseMedianBolt(Fields fields) {
 		outFields = fields;
@@ -91,8 +92,8 @@ public class PerHouseMedianBolt implements IRichBolt {
 			Long timestampEnd, Long queryEvalTime, Integer houseId, Integer householdId,
 			Integer plugId) {
 		if (count % 1000 == 0) {
-			LOGGER.info("median at plug " + houseId + "_" + "_" + householdId + "_" + plugId
-					+ " is " + medianLoad);
+			LOGGER.info("median for plug " + houseId + "_" + "_" + householdId + "_" + plugId
+					+ " is " + medianLoad + " at " + new Timestamp(timestampStart));
 		}
 
 		_collector.emit(new Values(medianLoad, globalMedian, timestampStart, timestampEnd,
