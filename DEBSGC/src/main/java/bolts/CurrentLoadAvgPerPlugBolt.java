@@ -77,7 +77,7 @@ public class CurrentLoadAvgPerPlugBolt implements IRichBolt {
 		cepAdm.createEPL("on beans.SmartPlugBean(timestamp > UL) set LL=(LL+" + avgCalcInterval
 				+ "), UL=(UL+" + avgCalcInterval + ") ");
 		EPStatement cepStatement = cepAdm
-				.createEPL("select houseId,,householdId,plugId, AVG(value) as "
+				.createEPL("select houseId,householdId,plugId, AVG(value) as "
 						+ "avgVal,timestamp,current_timestamp FROM "
 						+ "beans.SmartPlugBean(property="
 						+ PlatformCore.LOAD_PROPERTY

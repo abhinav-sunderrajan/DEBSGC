@@ -34,8 +34,10 @@ import beans.SmartPlugBean;
 import bolts.ArchiveMedianPerHouseBolt;
 import bolts.ArchiveMedianPerPlugBolt;
 import bolts.CurrentLoadAvgPerHouseBolt;
+import bolts.CurrentLoadAvgPerPlugBolt;
 import bolts.DisplayBoltQuery1A;
 import bolts.Query1ALiveArchiveJoin;
+import bolts.Query1BLiveArchiveJoin;
 
 /**
  * A singleton instance of the stream processing platform to set up the
@@ -173,8 +175,7 @@ public class PlatformCore {
 			// Topology for query 1a
 			core.builder.setBolt(
 					"CurrentLoadAvgPerHouseBolt",
-					new CurrentLoadAvgPerHouseBolt(Long.parseLong(configProperties
-							.getProperty("query1.window.size.ms")), new Fields("houseId",
+					new CurrentLoadAvgPerHouseBolt(SLICE_IN_MINUTES * 60000, new Fields("houseId",
 							"CurrentLoadPerHouseBean")), 5).fieldsGrouping("live_stream",
 					new Fields("houseId"));
 
@@ -187,21 +188,17 @@ public class PlatformCore {
 					"Query1ALiveArchiveJoin");
 
 			// Topology for query 1b
-			// core.builder.setBolt(
-			// "CurrentLoadAvgPerPlugBolt",
-			// new CurrentLoadAvgPerPlugBolt(Long.parseLong(configProperties
-			// .getProperty("query1.window.size.ms")), new Fields("houseId",
-			// "householdId", "plugId", "CurrentLoadPerPlugBean")),
-			// 5).fieldsGrouping(
-			// "live_stream", new Fields("houseId", "householdId", "plugId"));
-			// core.builder.setBolt(
-			// "Query1BLiveArchiveJoin",
-			// new Query1BLiveArchiveJoin(new Fields("houseId", "householdId",
-			// "plugId",
-			// "currentLoad", "predictedLoad", "predictedTimeString",
-			// "evalTime")), 5)
-			// .fieldsGrouping("CurrentLoadAvgPerPlugBolt",
-			// new Fields("houseId", "householdId", "plugId"));
+			core.builder.setBolt(
+					"CurrentLoadAvgPerPlugBolt",
+					new CurrentLoadAvgPerPlugBolt(SLICE_IN_MINUTES * 60000, new Fields("houseId",
+							"householdId", "plugId", "CurrentLoadPerPlugBean")), 5).fieldsGrouping(
+					"live_stream", new Fields("houseId", "householdId", "plugId"));
+			core.builder.setBolt(
+					"Query1BLiveArchiveJoin",
+					new Query1BLiveArchiveJoin(new Fields("houseId", "householdId", "plugId",
+							"currentLoad", "predictedLoad", "predictedTimeString", "evalTime")), 5)
+					.fieldsGrouping("CurrentLoadAvgPerPlugBolt",
+							new Fields("houseId", "householdId", "plugId"));
 
 			// Topology for query 2
 

@@ -27,15 +27,16 @@ public class Query1BLiveArchiveJoin implements IRichBolt {
 	private OutputCollector _collector;
 	private transient DescriptiveStatistics stats;
 	private Fields outFields;
+	private static int count = 0;
 
 	public Query1BLiveArchiveJoin(Fields outFields) {
 		this.outFields = outFields;
-		stats = new DescriptiveStatistics();
 	}
 
 	@Override
 	public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
-		// TODO Auto-generated method stub
+		stats = new DescriptiveStatistics();
+		_collector = collector;
 
 	}
 
@@ -50,26 +51,35 @@ public class Query1BLiveArchiveJoin implements IRichBolt {
 				* 1000);
 		int hrs = cal.get(Calendar.HOUR);
 		int mnts = cal.get(Calendar.MINUTE);
-		int secs = cal.get(Calendar.SECOND);
-		String predTimeStart = String.format("%02d:%02d:%02d", hrs, mnts, secs);
+		String predTimeStart = String.format("%02d:%02d", hrs, mnts);
 		cal.setTimeInMillis(currentLoad.getCurrTime() + 3 * PlatformCore.SLICE_IN_MINUTES * 60
 				* 1000);
 		hrs = cal.get(Calendar.HOUR);
 		mnts = cal.get(Calendar.MINUTE);
-		secs = cal.get(Calendar.SECOND);
-		String predTimeEnd = String.format("%02d:%02d:%02d", hrs, mnts, secs);
+		String predTimeEnd = String.format("%02d:%02d", hrs, mnts);
 
 		String key = predTimeStart + " TO " + predTimeEnd;
+
 		Buffer values = PlatformCore.averageLoadPerPlugPerTimeSlice.get(
 				houseId + "_" + householdId + "_" + plugId).get(key);
-		for (Object obj : values) {
-			stats.addValue((double) obj);
-		}
 
-		_collector.emit(new Values(houseId + "_" + householdId + "_" + plugId, currentLoad
-				.getCurrentAverageLoad(), (stats.getPercentile(50) + currentLoad
-				.getCurrentAverageLoad()) / 2.0, key, currentLoad.getEvaluationTime()));
-		stats.clear();
+		if (values != null) {
+
+			for (Object obj : values) {
+				stats.addValue((Float) obj);
+			}
+
+			double predictedLoad = (stats.getPercentile(50) + currentLoad.getCurrentAverageLoad()) / 2.0;
+			_collector.emit(new Values(houseId + "_" + householdId + "_" + plugId, currentLoad
+					.getCurrentAverageLoad(), predictedLoad, key, currentLoad.getEvaluationTime()));
+			stats.clear();
+			count++;
+
+			if (count % 200 == 0) {
+				System.out.println("Predicted load at " + houseId + "_" + householdId + "_"
+						+ plugId + " is " + predictedLoad + " for time " + key);
+			}
+		}
 
 	}
 

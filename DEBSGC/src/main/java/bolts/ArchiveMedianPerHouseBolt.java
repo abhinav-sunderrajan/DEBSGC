@@ -39,7 +39,8 @@ public class ArchiveMedianPerHouseBolt implements IRichBolt {
 	@SuppressWarnings("unchecked")
 	public void update(Short houseId, String timeSlice, Double averageLoad) {
 
-		LOGGER.info("average for " + houseId + " at " + timeSlice + " is " + averageLoad);
+		// LOGGER.info("average for " + houseId + " at " + timeSlice + " is " +
+		// averageLoad);
 		if (PlatformCore.averageLoadPerHousePerTimeSlice.containsKey(houseId)) {
 			if (!PlatformCore.averageLoadPerHousePerTimeSlice.get(houseId).containsKey(timeSlice)) {
 				Buffer medianList = BufferUtils.synchronizedBuffer(new CircularFifoBuffer(
@@ -57,7 +58,7 @@ public class ArchiveMedianPerHouseBolt implements IRichBolt {
 			ConcurrentHashMap<String, Buffer> bufferMap = new ConcurrentHashMap<String, Buffer>();
 
 			Buffer medianList = BufferUtils.synchronizedBuffer(new CircularFifoBuffer(
-					PlatformCore.NUMBER_OF_ARCHIVE_STREAMS));
+					PlatformCore.NUMBER_OF_DAYS_IN_ARCHIVE));
 			medianList.add(averageLoad);
 			bufferMap.put(timeSlice, medianList);
 			PlatformCore.averageLoadPerHousePerTimeSlice.put(houseId, bufferMap);
@@ -76,14 +77,11 @@ public class ArchiveMedianPerHouseBolt implements IRichBolt {
 		cepRT = cep.getEPRuntime();
 		cepAdm = cep.getEPAdministrator();
 
-		EPStatement cepStatement = cepAdm
-				.createEPL("@Hint('reclaim_group_aged="
-						+ PlatformCore.dbLoadRate
-						+ "')"
-						+ "SELECT houseId,timeSlice,average FROM "
-						+ "beans.HistoryBean"
-						+ ".std:groupwin(houseId,timeSlice).win:expr_batch(averageLoad<0.0).stat:weighted_avg(averageLoad,readingsCount) "
-						+ "group by houseId,timeSlice");
+		EPStatement cepStatement = cepAdm.createEPL("@Hint('reclaim_group_aged="
+				+ PlatformCore.dbLoadRate + "')"
+				+ "SELECT houseId,timeSlice,average FROM beans.HistoryBean"
+				+ ".std:groupwin(houseId,timeSlice).win:expr_batch(averageLoad<0.0)"
+				+ ".stat:weighted_avg(averageLoad,readingsCount) " + "group by houseId,timeSlice");
 		cepStatement.setSubscriber(this);
 
 	}
