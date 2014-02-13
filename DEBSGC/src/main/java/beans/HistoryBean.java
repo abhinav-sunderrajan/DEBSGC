@@ -25,6 +25,16 @@ public class HistoryBean implements Serializable {
 	public HistoryBean() {
 	}
 
+	/**
+	 * Initialize with the fields.
+	 * 
+	 * @param houseId
+	 * @param householdId
+	 * @param plugId
+	 * @param averageLoad
+	 * @param readingsCount
+	 * @param timeSlice
+	 */
 	public HistoryBean(short houseId, short householdId, short plugId, float averageLoad,
 			int readingsCount, String timeSlice) {
 		this.houseId = houseId;

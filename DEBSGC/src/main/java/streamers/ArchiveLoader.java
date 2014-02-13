@@ -3,8 +3,8 @@ package streamers;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Calendar;
-import java.util.Queue;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.HashSet;
+import java.util.Set;
 
 import main.PlatformCore;
 
@@ -14,13 +14,13 @@ import utils.DatabaseAccess;
 import beans.HistoryBean;
 
 public class ArchiveLoader<T> implements Runnable {
-	private Queue<T> buffer;
 	protected DatabaseAccess dbconnect = new DatabaseAccess();
-	protected Object monitor;
 	private long startTime;
 	private long endTime;
 	private int count;
 	private Calendar cal;
+	private int queueIndex;
+	private Set<Short> houseIdList;
 	private static final Logger LOGGER = Logger.getLogger(ArchiveLoader.class);
 
 	/**
@@ -29,14 +29,13 @@ public class ArchiveLoader<T> implements Runnable {
 	 * @param monitor
 	 * @param startTime
 	 */
-	public ArchiveLoader(final ConcurrentLinkedQueue<T> buffer, final Object monitor,
-			final long startTime) {
-		this.buffer = buffer;
+	public ArchiveLoader(int queueIndex, final long startTime) {
 		dbconnect.openDBConnection(PlatformCore.connectionProperties);
-		this.monitor = monitor;
+		houseIdList = new HashSet<Short>();
 		this.startTime = startTime;
 		this.endTime = startTime + (PlatformCore.SLICE_IN_MINUTES * 60 * 1000);
 		cal = Calendar.getInstance();
+		this.queueIndex = queueIndex;
 	}
 
 	@Override
@@ -60,31 +59,36 @@ public class ArchiveLoader<T> implements Runnable {
 				bean.setHouseId(rs.getShort("house_id"));
 				bean.setHouseholdId(rs.getShort("household_id"));
 				bean.setPlugId(rs.getShort("plug_id"));
+				houseIdList.add(bean.getHouseId());
 
 				cal.setTimeInMillis(startTime);
 				int hrs = cal.get(Calendar.HOUR);
 				int mnts = cal.get(Calendar.MINUTE);
-				int secs = cal.get(Calendar.SECOND);
-				String predTimeStart = String.format("%02d:%02d:%02d", hrs, mnts, secs);
+				String predTimeStart = String.format("%02d:%02d", hrs, mnts);
 				cal.setTimeInMillis(endTime);
 				hrs = cal.get(Calendar.HOUR);
 				mnts = cal.get(Calendar.MINUTE);
-				secs = cal.get(Calendar.SECOND);
-				String predTimeEnd = String.format("%02d:%02d:%02d", hrs, mnts, secs);
+				String predTimeEnd = String.format("%02d:%02d", hrs, mnts);
 				timeSlice = predTimeStart + " TO " + predTimeEnd;
 				bean.setTimeSlice(timeSlice);
-				buffer.add((T) bean);
 
+				PlatformCore.archiveStreamBufferArr.get(queueIndex).add(bean);
 			}
-			// Create a punctuation event after each database load
-			HistoryBean punctuation = new HistoryBean((short) -1, (short) -1, (short) -1, 0.0f, 1,
-					timeSlice);
-			buffer.add((T) punctuation);
+			// Create a punctuation event for each house id after each database
+			// load
+			for (short houseId : houseIdList) {
+				HistoryBean punctuation = new HistoryBean(houseId, (short) -1, (short) -1, -100.0f,
+						1, timeSlice);
+				PlatformCore.archiveStreamBufferArr.get(queueIndex).add(punctuation);
+			}
+			houseIdList.clear();
+			// End of punctuation events
 
-			if (count == 2) {
-				synchronized (monitor) {
+			count++;
+			if (count == 1) {
+				synchronized (PlatformCore.monitor) {
 					LOGGER.info("Wait for live streams before further database loading");
-					monitor.wait();
+					PlatformCore.monitor.wait();
 					LOGGER.info("Receiving live streams. Start database load normally");
 				}
 			}
@@ -92,7 +96,7 @@ public class ArchiveLoader<T> implements Runnable {
 			// Update the time stamps for the next fetch.
 			startTime = startTime + (PlatformCore.SLICE_IN_MINUTES * 60 * 1000);
 			endTime = endTime + (PlatformCore.SLICE_IN_MINUTES * 60 * 1000);
-			count++;
+
 		} catch (SQLException e) {
 			LOGGER.error("Error accessing the database to retrieve archived data", e);
 		} catch (InterruptedException e) {

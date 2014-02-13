@@ -2,6 +2,7 @@ package bolts;
 
 import java.util.Calendar;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicLong;
@@ -35,25 +36,27 @@ public class DisplayBoltQuery1A implements IRichBolt {
 	private static final long serialVersionUID = 1L;
 	private long count = 0;
 	private long numOfMsgsin30Sec = 0;
-	private StreamJoinDisplay display;
+	private transient StreamJoinDisplay display;
 	private long latency;
 	private Map<Integer, Double> valueMap;
 	private AtomicLong timer;
 	private boolean throughputFlag;
-	private BarChartDisplay valuesOutput;
+	private transient BarChartDisplay valuesOutput;
 	public final String CURRENT_LOAD = "Current Load";
 	public final String PREDICTED_LOAD = "Predicted Load";
 	private HashMap<String, Double> barchartDisplayMap;
 
 	@SuppressWarnings("deprecation")
-	public DisplayBoltQuery1A(int streamRate) {
+	@Override
+	public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
+
 		display = StreamJoinDisplay.getInstance("Join Performance Measure",
 				PlatformCore.configProperties.getProperty("image.save.directory"));
 
 		valuesOutput = new BarChartDisplay("Load Prediction", "House ID", "Load(W)",
 				PlatformCore.configProperties.getProperty("image.save.directory"),
 				new DefaultCategoryDataset());
-		barchartDisplayMap = new HashMap<String, Double>();
+		barchartDisplayMap = new LinkedHashMap<String, Double>();
 		barchartDisplayMap.put(CURRENT_LOAD, 0.0);
 		barchartDisplayMap.put(PREDICTED_LOAD, 0.0);
 
@@ -74,10 +77,6 @@ public class DisplayBoltQuery1A implements IRichBolt {
 		valueMap = new HashMap<Integer, Double>();
 		valueMap.put((2 + this.hashCode()), 0.0);
 		valueMap.put((1 + this.hashCode()), 0.0);
-	}
-
-	@Override
-	public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
 
 	}
 

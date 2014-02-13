@@ -39,8 +39,8 @@ public class ArchiveMedianPerHouseBolt implements IRichBolt {
 	@SuppressWarnings("unchecked")
 	public void update(Short houseId, String timeSlice, Double averageLoad) {
 
-		LOGGER.info("houseId:" + houseId + " time:" + timeSlice + " load:" + averageLoad);
-		if (PlatformCore.averageLoadPerPlugPerTimeSlice.containsKey(houseId)) {
+		LOGGER.info("average for " + houseId + " at " + timeSlice + " is " + averageLoad);
+		if (PlatformCore.averageLoadPerHousePerTimeSlice.containsKey(houseId)) {
 			if (!PlatformCore.averageLoadPerHousePerTimeSlice.get(houseId).containsKey(timeSlice)) {
 				Buffer medianList = BufferUtils.synchronizedBuffer(new CircularFifoBuffer(
 						PlatformCore.NUMBER_OF_DAYS_IN_ARCHIVE));
@@ -55,11 +55,12 @@ public class ArchiveMedianPerHouseBolt implements IRichBolt {
 		} else {
 
 			ConcurrentHashMap<String, Buffer> bufferMap = new ConcurrentHashMap<String, Buffer>();
-			PlatformCore.averageLoadPerHousePerTimeSlice.put(houseId, bufferMap);
+
 			Buffer medianList = BufferUtils.synchronizedBuffer(new CircularFifoBuffer(
 					PlatformCore.NUMBER_OF_ARCHIVE_STREAMS));
 			medianList.add(averageLoad);
-			PlatformCore.averageLoadPerHousePerTimeSlice.get(houseId).put(timeSlice, medianList);
+			bufferMap.put(timeSlice, medianList);
+			PlatformCore.averageLoadPerHousePerTimeSlice.put(houseId, bufferMap);
 
 		}
 
@@ -75,10 +76,14 @@ public class ArchiveMedianPerHouseBolt implements IRichBolt {
 		cepRT = cep.getEPRuntime();
 		cepAdm = cep.getEPAdministrator();
 
-		EPStatement cepStatement = cepAdm.createEPL("SELECT houseId,timeSlice,average FROM "
-				+ "beans.HistoryBean.win:expr_batch(houseId=-1,false)"
-				+ ".std:groupwin(houseId,timeSlice).stat:weighted_avg(averageLoad,readingsCount) "
-				+ "group by houseId,timeSlice");
+		EPStatement cepStatement = cepAdm
+				.createEPL("@Hint('reclaim_group_aged="
+						+ PlatformCore.dbLoadRate
+						+ "')"
+						+ "SELECT houseId,timeSlice,average FROM "
+						+ "beans.HistoryBean"
+						+ ".std:groupwin(houseId,timeSlice).win:expr_batch(averageLoad<0.0).stat:weighted_avg(averageLoad,readingsCount) "
+						+ "group by houseId,timeSlice");
 		cepStatement.setSubscriber(this);
 
 	}

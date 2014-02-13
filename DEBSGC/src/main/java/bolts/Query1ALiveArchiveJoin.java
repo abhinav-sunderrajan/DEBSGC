@@ -1,5 +1,6 @@
 package bolts;
 
+import java.sql.Timestamp;
 import java.util.Calendar;
 import java.util.Map;
 
@@ -25,12 +26,14 @@ public class Query1ALiveArchiveJoin implements IRichBolt {
 	private static final long serialVersionUID = 1L;
 	private static Calendar cal = Calendar.getInstance();
 	private OutputCollector _collector;
-	private transient DescriptiveStatistics stats = new DescriptiveStatistics();
+	private transient DescriptiveStatistics stats;
 	private Fields outFields;
+	private static int count = 0;
 
 	@Override
 	public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
 		_collector = collector;
+		stats = new DescriptiveStatistics();
 
 	}
 
@@ -46,19 +49,17 @@ public class Query1ALiveArchiveJoin implements IRichBolt {
 				* 1000);
 		int hrs = cal.get(Calendar.HOUR);
 		int mnts = cal.get(Calendar.MINUTE);
-		int secs = cal.get(Calendar.SECOND);
-		String predTimeStart = String.format("%02d:%02d:%02d", hrs, mnts, secs);
+		String predTimeStart = String.format("%02d:%02d", hrs, mnts);
 		cal.setTimeInMillis(currentLoad.getCurrTime() + 3 * PlatformCore.SLICE_IN_MINUTES * 60
 				* 1000);
 		hrs = cal.get(Calendar.HOUR);
 		mnts = cal.get(Calendar.MINUTE);
-		secs = cal.get(Calendar.SECOND);
-		String predTimeEnd = String.format("%02d:%02d:%02d", hrs, mnts, secs);
+		String predTimeEnd = String.format("%02d:%02d", hrs, mnts);
 
 		String key = predTimeStart + " TO " + predTimeEnd;
 		Buffer values = PlatformCore.averageLoadPerHousePerTimeSlice.get(currentLoad.getHouseId())
 				.get(key);
-		System.out.println(key);
+
 		if (values != null) {
 			for (Object obj : values) {
 				stats.addValue((double) obj);
@@ -68,6 +69,11 @@ public class Query1ALiveArchiveJoin implements IRichBolt {
 					.getCurrentAverageLoad()) / 2.0, key, currentLoad.getEvaluationTime()));
 			stats.clear();
 
+		}
+
+		count++;
+		if (count % 1000 == 0) {
+			System.out.println(new Timestamp(currentLoad.getCurrTime()));
 		}
 
 	}

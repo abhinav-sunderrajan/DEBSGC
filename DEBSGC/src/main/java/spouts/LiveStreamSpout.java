@@ -2,10 +2,10 @@ package spouts;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ScheduledExecutorService;
 
+import main.PlatformCore;
 import utils.NettyServer;
 import backtype.storm.Config;
 import backtype.storm.spout.SpoutOutputCollector;
@@ -29,8 +29,7 @@ public class LiveStreamSpout<E> extends BaseRichSpout {
 	 * 
 	 */
 	private static final long serialVersionUID = 1L;
-	private Object monitor;
-	private Queue<E> buffer;
+	private ConcurrentLinkedQueue<E> buffer;
 	private SpoutOutputCollector _collector;
 	private static final boolean _isDistributed = false;
 	private Fields outFields;
@@ -52,11 +51,10 @@ public class LiveStreamSpout<E> extends BaseRichSpout {
 	 * @param property
 	 * @param outFields
 	 */
-	public LiveStreamSpout(final ConcurrentLinkedQueue<E> buffer, final Object monitor,
+	public LiveStreamSpout(final ConcurrentLinkedQueue<E> buffer,
 			final ScheduledExecutorService executor, final int streamRate, final int port,
 			final String writeFileDir, final String imageSaveDirectory, final Fields outFields) {
 		this.buffer = buffer;
-		this.monitor = monitor;
 		this.outFields = outFields;
 		this.streamRate = streamRate;
 		this.writeFileDir = writeFileDir;
@@ -70,8 +68,8 @@ public class LiveStreamSpout<E> extends BaseRichSpout {
 		_collector = collector;
 
 		// Fire up the netty server to listen to streams at the given port.
-		NettyServer<E> server = new NettyServer<E>((ConcurrentLinkedQueue<E>) buffer, streamRate,
-				writeFileDir, imageSaveDirectory);
+		NettyServer<E> server = new NettyServer<E>(buffer, streamRate, writeFileDir,
+				imageSaveDirectory);
 		server.listen(port);
 
 	}
@@ -83,8 +81,8 @@ public class LiveStreamSpout<E> extends BaseRichSpout {
 			if (buffer.isEmpty()) {
 				return;
 			}
-			synchronized (monitor) {
-				monitor.notifyAll();
+			synchronized (PlatformCore.monitor) {
+				PlatformCore.monitor.notifyAll();
 			}
 			E obj = buffer.poll();
 			if (obj instanceof SmartPlugBean) {

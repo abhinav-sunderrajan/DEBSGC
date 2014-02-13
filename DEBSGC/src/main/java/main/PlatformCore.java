@@ -6,6 +6,8 @@ import java.io.IOException;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
@@ -48,17 +50,15 @@ public class PlatformCore {
 	private static long archiveStartTime;
 	private static PlatformCore core;
 	private static int streamRate;
-	private static int dbLoadRate;
-	private static int archiveStreamRate;
-	private Integer monitor;
 	private static final int SERVER_PORT = 9090;
 	private static final String CONFIG_FILE_PATH = "src/main/resources/config.properties";
 	private static final String CONNECTION_FILE_PATH = "src/main/resources/connection.properties";
+	public static int dbLoadRate;
 	public static long liveStartTime;
 	public static ScheduledExecutorService executor = Executors.newScheduledThreadPool(100);
 	public static Properties connectionProperties;
 	public static Properties configProperties;
-	public static final int SLICE_IN_MINUTES = 15;
+	public static final int SLICE_IN_MINUTES = 1;
 	public static final int WORK_PROPERTY = 0;
 	public static final int LOAD_PROPERTY = 1;
 	public static final int NUMBER_OF_ARCHIVE_STREAMS = 1;
@@ -76,12 +76,19 @@ public class PlatformCore {
 
 	public static Map<Short, ConcurrentHashMap<String, Boolean>> loadStatusMap = new ConcurrentHashMap<Short, ConcurrentHashMap<String, Boolean>>();
 
+	// Shared buffer between archive loader and the archive stream spout.
+
+	public static List<ConcurrentLinkedQueue<HistoryBean>> archiveStreamBufferArr = new ArrayList<ConcurrentLinkedQueue<HistoryBean>>();
+
+	// Lock for coordinating the archive loader and the live streams.
+	public static transient Object monitor;
+
 	private PlatformCore() throws ParseException {
-		monitor = new Integer(0);
+		monitor = new Object();
 		streamRate = Integer
 				.parseInt(configProperties.getProperty("live.stream.rate.in.microsecs"));
-		dbLoadRate = (int) (SLICE_IN_MINUTES * 0.4);
-		archiveStreamRate = (int) (streamRate * 0.9);
+		dbLoadRate = (int) (1000 * 60 * SLICE_IN_MINUTES * streamRate / 1000000);
+		LOGGER.info("Database load rate in seconds is " + dbLoadRate);
 		builder = new TopologyBuilder();
 		liveStartTime = Long.parseLong((PlatformCore.configProperties
 				.getProperty("live.start.time")));
@@ -124,14 +131,17 @@ public class PlatformCore {
 							"HistoryBean", "houseid", "timeSlice")), 5);
 
 			for (int count = 0; count < NUMBER_OF_ARCHIVE_STREAMS; count++) {
+				archiveStreamBufferArr.add(new ConcurrentLinkedQueue<HistoryBean>());
+			}
 
-				ConcurrentLinkedQueue<HistoryBean> archiveStreamBuffer = new ConcurrentLinkedQueue<HistoryBean>();
-				ArchiveLoader<HistoryBean> archiveLoader = new ArchiveLoader<HistoryBean>(
-						archiveStreamBuffer, core.monitor, archiveloadStart);
-				ScheduledFuture<?> future = executor.scheduleAtFixedRate(archiveLoader, 0,
-						dbLoadRate, TimeUnit.MINUTES);
+			for (int count = 0; count < NUMBER_OF_ARCHIVE_STREAMS; count++) {
+
+				ScheduledFuture<?> future = executor.scheduleAtFixedRate(
+						new ArchiveLoader<HistoryBean>(count, archiveloadStart), 0, dbLoadRate,
+						TimeUnit.SECONDS);
+
 				ArchiveStreamSpout<HistoryBean> archiveStreamSpout = new ArchiveStreamSpout<HistoryBean>(
-						archiveStreamBuffer, archiveStreamRate);
+						count);
 				core.builder.setSpout("archive_stream_" + count, archiveStreamSpout);
 				declarer.fieldsGrouping("archive_stream_" + count, new Fields("houseId",
 						"householdId", "plugId", "timeSlice"));
@@ -148,7 +158,7 @@ public class PlatformCore {
 			ConcurrentLinkedQueue<SmartPlugBean> liveStreamBuffer = new ConcurrentLinkedQueue<SmartPlugBean>();
 
 			LiveStreamSpout<SmartPlugBean> liveStreamLoadSpout = new LiveStreamSpout<SmartPlugBean>(
-					liveStreamBuffer, core.monitor, executor, streamRate, SERVER_PORT,
+					liveStreamBuffer, executor, streamRate, SERVER_PORT,
 					configProperties.getProperty("ingestion.file.dir"),
 					configProperties.getProperty("image.save.directory"), new Fields("livebean",
 							"houseId", "householdId", "plugId"));
@@ -173,8 +183,8 @@ public class PlatformCore {
 					new Query1ALiveArchiveJoin(new Fields("houseId", "currentLoad",
 							"predictedLoad", "predictedTimeString", "evalTime")), 5)
 					.fieldsGrouping("CurrentLoadAvgPerHouseBolt", new Fields("houseId"));
-			core.builder.setBolt("DisplayBoltQuery1A", new DisplayBoltQuery1A(streamRate), 1)
-					.globalGrouping("Query1ALiveArchiveJoin");
+			core.builder.setBolt("DisplayBoltQuery1A", new DisplayBoltQuery1A(), 1).globalGrouping(
+					"Query1ALiveArchiveJoin");
 
 			// Topology for query 1b
 			// core.builder.setBolt(
