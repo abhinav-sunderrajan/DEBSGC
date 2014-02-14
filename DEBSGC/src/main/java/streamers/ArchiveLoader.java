@@ -76,8 +76,9 @@ public class ArchiveLoader<T> implements Runnable {
 			}
 			// Create a punctuation event for each house id after each database
 			// load
+
 			for (short houseId : houseIdList) {
-				HistoryBean punctuation = new HistoryBean(houseId, (short) -1, (short) -1, -100.0f,
+				HistoryBean punctuation = new HistoryBean(houseId, (short) -1, (short) -1, -1.0f,
 						1, timeSlice);
 				PlatformCore.archiveStreamBufferArr.get(queueIndex).add(punctuation);
 			}

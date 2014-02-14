@@ -4,13 +4,26 @@
   <artifactId>StormTest</artifactId>
   <version>0.0.1-SNAPSHOT</version>
   <name>StormTest</name>
+   <build>
+       <plugins>
+   		 <plugin>
+          <artifactId>maven-assembly-plugin</artifactId>
+          <version>2.3</version>
+          <configuration>
+            <descriptorRefs>
+                    <descriptorRef>jar-with-dependencies</descriptorRef>
+            </descriptorRefs>
+            <artifactSet>
+                    <excludes>
+                            <exclude>*.yaml</exclude>
+                    </excludes>
+            </artifactSet>
+          </configuration>
+    </plugin>
+    </plugins>
+    </build>
   <description>Project to test a storm topology and deploy it on the cluster to test DEBS GC challenge</description>
    <dependencies>
-        <dependency>
-            <groupId>log4j</groupId>
-            <artifactId>log4j</artifactId>
-            <version>1.2.16</version>
-        </dependency>
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
@@ -38,6 +51,18 @@
 			  <artifactId>storm</artifactId>
 			  <version>0.9.0.1</version>
 			  <scope>provided</scope>
+			  <optional>true</optional>
+			   <exclusions>
+				      <exclusion> 
+				        <groupId>org.slf4j</groupId>
+				        <artifactId>slf4j-log4j12</artifactId>
+				      </exclusion>
+				      <exclusion> 
+				        <groupId>log4j</groupId>
+				        <artifactId>log4j</artifactId>
+				      </exclusion>
+			    </exclusions> 
+			  
 		</dependency>
 		<dependency>
 				<groupId>commons-collections</groupId>

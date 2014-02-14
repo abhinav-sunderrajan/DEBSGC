@@ -22,7 +22,7 @@ import com.espertech.esper.client.EPServiceProvider;
 import com.espertech.esper.client.EPServiceProviderManager;
 import com.espertech.esper.client.EPStatement;
 
-public class PerHouseMedianBolt implements IRichBolt {
+public class PerPlugMedianBolt implements IRichBolt {
 
 	/**
 	 * 
@@ -35,9 +35,9 @@ public class PerHouseMedianBolt implements IRichBolt {
 	private OutputCollector _collector;
 	private Fields outFields;
 	private static long count = 0;
-	private static final Logger LOGGER = Logger.getLogger(PerHouseMedianBolt.class);
+	private static final Logger LOGGER = Logger.getLogger(PerPlugMedianBolt.class);
 
-	public PerHouseMedianBolt(Fields fields) {
+	public PerPlugMedianBolt(Fields fields) {
 		outFields = fields;
 	}
 

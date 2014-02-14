@@ -48,7 +48,7 @@ public class ArchiveMedianPerPlugBolt implements IRichBolt {
 	public void execute(Tuple input) {
 
 		HistoryBean bean = (HistoryBean) input.getValue(0);
-		if (bean.getHouseId() != -1) {
+		if (bean.getHouseholdId() != -1) {
 			final short houseId = input.getShort(1);
 			final short householdId = input.getShort(2);
 			final short plugId = input.getShort(3);

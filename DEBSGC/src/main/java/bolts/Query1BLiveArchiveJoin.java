@@ -7,6 +7,7 @@ import main.PlatformCore;
 
 import org.apache.commons.collections.Buffer;
 import org.apache.commons.math.stat.descriptive.DescriptiveStatistics;
+import org.apache.log4j.Logger;
 
 import backtype.storm.task.OutputCollector;
 import backtype.storm.task.TopologyContext;
@@ -28,6 +29,7 @@ public class Query1BLiveArchiveJoin implements IRichBolt {
 	private transient DescriptiveStatistics stats;
 	private Fields outFields;
 	private static int count = 0;
+	private static final Logger LOGGER = Logger.getLogger(Query1BLiveArchiveJoin.class);
 
 	public Query1BLiveArchiveJoin(Fields outFields) {
 		this.outFields = outFields;
@@ -75,9 +77,11 @@ public class Query1BLiveArchiveJoin implements IRichBolt {
 			stats.clear();
 			count++;
 
+			// Not sure how to visualize this hence logging the predicted load
+			// for every 200 tuples processed.
 			if (count % 200 == 0) {
-				System.out.println("Predicted load at " + houseId + "_" + householdId + "_"
-						+ plugId + " is " + predictedLoad + " for time " + key);
+				LOGGER.info("Predicted load at " + houseId + "_" + householdId + "_" + plugId
+						+ " is " + predictedLoad + " for time " + key);
 			}
 		}
 
