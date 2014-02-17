@@ -5,7 +5,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ScheduledExecutorService;
 
-import main.PlatformCore;
 import utils.NettyServer;
 import backtype.storm.Config;
 import backtype.storm.spout.SpoutOutputCollector;
@@ -37,6 +36,7 @@ public class LiveStreamSpout<E> extends BaseRichSpout {
 	private String writeFileDir;
 	private String imageSaveDirectory;
 	private int port;
+	private Integer monitor;
 
 	/**
 	 * 
@@ -53,13 +53,15 @@ public class LiveStreamSpout<E> extends BaseRichSpout {
 	 */
 	public LiveStreamSpout(final ConcurrentLinkedQueue<E> buffer,
 			final ScheduledExecutorService executor, final int streamRate, final int port,
-			final String writeFileDir, final String imageSaveDirectory, final Fields outFields) {
+			final String writeFileDir, final String imageSaveDirectory, final Fields outFields,
+			Integer monitor) {
 		this.buffer = buffer;
 		this.outFields = outFields;
 		this.streamRate = streamRate;
 		this.writeFileDir = writeFileDir;
 		this.port = port;
 		this.imageSaveDirectory = imageSaveDirectory;
+		this.monitor = monitor;
 
 	}
 
@@ -81,8 +83,8 @@ public class LiveStreamSpout<E> extends BaseRichSpout {
 			if (buffer.isEmpty()) {
 				return;
 			}
-			synchronized (PlatformCore.monitor) {
-				PlatformCore.monitor.notifyAll();
+			synchronized (this.monitor) {
+				this.monitor.notifyAll();
 			}
 			E obj = buffer.poll();
 			if (obj instanceof SmartPlugBean) {

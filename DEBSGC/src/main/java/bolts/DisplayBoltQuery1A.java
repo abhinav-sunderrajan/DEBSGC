@@ -7,8 +7,6 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicLong;
 
-import main.PlatformCore;
-
 import org.jfree.chart.JFreeChart;
 import org.jfree.data.category.DefaultCategoryDataset;
 import org.jfree.data.time.Minute;
@@ -51,11 +49,10 @@ public class DisplayBoltQuery1A implements IRichBolt {
 	public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
 
 		display = StreamJoinDisplay.getInstance("Join Performance Measure",
-				PlatformCore.configProperties.getProperty("image.save.directory"));
+				(String) stormConf.get("image.save.directory"));
 
 		valuesOutput = new BarChartDisplay("Load Prediction", "House ID", "Load(W)",
-				PlatformCore.configProperties.getProperty("image.save.directory"),
-				new DefaultCategoryDataset());
+				(String) stormConf.get("image.save.directory"), new DefaultCategoryDataset());
 		barchartDisplayMap = new LinkedHashMap<String, Double>();
 		barchartDisplayMap.put(CURRENT_LOAD, 0.0);
 		barchartDisplayMap.put(PREDICTED_LOAD, 0.0);

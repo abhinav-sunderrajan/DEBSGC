@@ -4,7 +4,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Calendar;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 import main.PlatformCore;
 
@@ -21,6 +23,9 @@ public class ArchiveLoader<T> implements Runnable {
 	private Calendar cal;
 	private int queueIndex;
 	private Set<Short> houseIdList;
+	private int sliceInMinutes;
+	private Integer monitor;
+	private List<ConcurrentLinkedQueue<HistoryBean>> archiveStreamBufferArr;
 	private static final Logger LOGGER = Logger.getLogger(ArchiveLoader.class);
 
 	/**
@@ -29,12 +34,17 @@ public class ArchiveLoader<T> implements Runnable {
 	 * @param monitor
 	 * @param startTime
 	 */
-	public ArchiveLoader(int queueIndex, final long startTime) {
-		dbconnect.openDBConnection(PlatformCore.connectionProperties);
+	public ArchiveLoader(int queueIndex, final long startTime, String url, String userName,
+			String password, int sliceInMinutes, Integer monitor,
+			List<ConcurrentLinkedQueue<HistoryBean>> archiveStreamBufferArr) {
+		dbconnect.openDBConnection(url, userName, password);
+		this.sliceInMinutes = sliceInMinutes;
+		this.monitor = monitor;
 		houseIdList = new HashSet<Short>();
 		this.startTime = startTime;
-		this.endTime = startTime + (PlatformCore.SLICE_IN_MINUTES * 60 * 1000);
+		this.endTime = startTime + (sliceInMinutes * 60 * 1000);
 		cal = Calendar.getInstance();
+		this.archiveStreamBufferArr = archiveStreamBufferArr;
 		this.queueIndex = queueIndex;
 	}
 
@@ -72,7 +82,7 @@ public class ArchiveLoader<T> implements Runnable {
 				timeSlice = predTimeStart + " TO " + predTimeEnd;
 				bean.setTimeSlice(timeSlice);
 
-				PlatformCore.archiveStreamBufferArr.get(queueIndex).add(bean);
+				archiveStreamBufferArr.get(queueIndex).add(bean);
 			}
 			// Create a punctuation event for each house id after each database
 			// load
@@ -80,23 +90,23 @@ public class ArchiveLoader<T> implements Runnable {
 			for (short houseId : houseIdList) {
 				HistoryBean punctuation = new HistoryBean(houseId, (short) -1, (short) -1, -1.0f,
 						1, timeSlice);
-				PlatformCore.archiveStreamBufferArr.get(queueIndex).add(punctuation);
+				archiveStreamBufferArr.get(queueIndex).add(punctuation);
 			}
 			houseIdList.clear();
 			// End of punctuation events
 
 			count++;
 			if (count == 1) {
-				synchronized (PlatformCore.monitor) {
+				synchronized (this.monitor) {
 					LOGGER.info("Wait for live streams before further database loading");
-					PlatformCore.monitor.wait();
+					this.monitor.wait();
 					LOGGER.info("Receiving live streams. Start database load normally");
 				}
 			}
 
 			// Update the time stamps for the next fetch.
-			startTime = startTime + (PlatformCore.SLICE_IN_MINUTES * 60 * 1000);
-			endTime = endTime + (PlatformCore.SLICE_IN_MINUTES * 60 * 1000);
+			startTime = startTime + (sliceInMinutes * 60 * 1000);
+			endTime = endTime + (sliceInMinutes * 60 * 1000);
 
 		} catch (SQLException e) {
 			LOGGER.error("Error accessing the database to retrieve archived data", e);

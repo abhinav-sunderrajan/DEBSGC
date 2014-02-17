@@ -9,21 +9,23 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.collections.Buffer;
 import org.apache.log4j.Logger;
 
 import spouts.LiveStreamSpout;
 import utils.EsperQueries;
-import utils.SigarSystemMonitor;
 import backtype.storm.Config;
 import backtype.storm.LocalCluster;
+import backtype.storm.StormSubmitter;
+import backtype.storm.generated.AlreadyAliveException;
+import backtype.storm.generated.InvalidTopologyException;
 import backtype.storm.topology.TopologyBuilder;
 import backtype.storm.tuple.Fields;
 import beans.HistoryBean;
@@ -49,38 +51,38 @@ public class PlatformCore {
 	private static final int SERVER_PORT = 9090;
 	private static final String CONFIG_FILE_PATH = "src/main/resources/config.properties";
 	private static final String CONNECTION_FILE_PATH = "src/main/resources/connection.properties";
-	public static int dbLoadRate;
-	public static long liveStartTime;
+	private static int dbLoadRate;
+	private static long liveStartTime;
 	public static ScheduledExecutorService executor = Executors.newScheduledThreadPool(100);
-	public static Properties connectionProperties;
-	public static Properties configProperties;
-	public static final int SLICE_IN_MINUTES = 1;
+	private static Properties connectionProperties;
+	private static Properties configProperties;
+	private static final int SLICE_IN_MINUTES = 1;
 	public static final int WORK_PROPERTY = 0;
 	public static final int LOAD_PROPERTY = 1;
-	public static final int NUMBER_OF_ARCHIVE_STREAMS = 1;
-	public static final int NUMBER_OF_DAYS_IN_ARCHIVE = 29;
+	private static final int NUMBER_OF_ARCHIVE_STREAMS = 1;
+	private static final int NUMBER_OF_DAYS_IN_ARCHIVE = 29;
 	private static final Logger LOGGER = Logger.getLogger(PlatformCore.class);
 	public static final DateFormat df = new SimpleDateFormat("dd-MMM-yyyy HH:mm:ss");
 
 	// A map maintaining a list of average load values per time slice per house.
 	// The size of the Circular buffer is determined by the number of days in
 	// history we are interested in.
-	public static Map<Short, ConcurrentHashMap<String, Buffer>> averageLoadPerHousePerTimeSlice = new ConcurrentHashMap<Short, ConcurrentHashMap<String, Buffer>>();
-	public static Map<String, ConcurrentHashMap<String, Buffer>> averageLoadPerPlugPerTimeSlice = new ConcurrentHashMap<String, ConcurrentHashMap<String, Buffer>>();
+	private static Map<Short, ConcurrentHashMap<String, Buffer>> averageLoadPerHousePerTimeSlice = new ConcurrentHashMap<Short, ConcurrentHashMap<String, Buffer>>();
+	private static Map<String, ConcurrentHashMap<String, Buffer>> averageLoadPerPlugPerTimeSlice = new ConcurrentHashMap<String, ConcurrentHashMap<String, Buffer>>();
 
 	// Data structure for query 2
 
-	public static Map<Short, ConcurrentHashMap<String, Boolean>> loadStatusMap = new ConcurrentHashMap<Short, ConcurrentHashMap<String, Boolean>>();
+	private static ConcurrentHashMap<Short, ConcurrentHashMap<String, Boolean>> loadStatusMap = new ConcurrentHashMap<Short, ConcurrentHashMap<String, Boolean>>();
 
 	// Shared buffer between archive loader and the archive stream spout.
 
-	public static List<ConcurrentLinkedQueue<HistoryBean>> archiveStreamBufferArr = new ArrayList<ConcurrentLinkedQueue<HistoryBean>>();
+	private static List<ConcurrentLinkedQueue<HistoryBean>> archiveStreamBufferArr = new ArrayList<ConcurrentLinkedQueue<HistoryBean>>();
 
 	// Lock for coordinating the archive loader and the live streams.
-	public static transient Object monitor;
+	private static Integer monitor;
 
 	private PlatformCore() throws ParseException {
-		monitor = new Object();
+		monitor = new Integer(2);
 		streamRate = Integer
 				.parseInt(configProperties.getProperty("live.stream.rate.in.microsecs"));
 		dbLoadRate = (int) (1000 * 60 * SLICE_IN_MINUTES * streamRate / 1000000);
@@ -96,13 +98,18 @@ public class PlatformCore {
 
 		String configFilePath;
 		String connectionFilePath;
+		String topologyName = null;
+		boolean isLocal = true;
 
-		if (args.length < 2) {
+		if (args.length < 3) {
 			configFilePath = CONFIG_FILE_PATH;
 			connectionFilePath = CONNECTION_FILE_PATH;
+			topologyName = "test";
 		} else {
 			configFilePath = args[0];
 			connectionFilePath = args[1];
+			topologyName = args[2];
+			isLocal = false;
 		}
 
 		connectionProperties = new Properties();
@@ -113,12 +120,13 @@ public class PlatformCore {
 			core = new PlatformCore();
 
 			// Start monitoring the system CPU, memory parameters
-			SigarSystemMonitor sysMonitor = SigarSystemMonitor.getInstance(
-					configProperties.getProperty("memory.file.dir"), streamRate,
-					configProperties.getProperty("image.save.directory"));
-			sysMonitor.setCpuUsageScalefactor((Double.parseDouble(configProperties
-					.getProperty("cpu.usage.scale.factor"))));
-			executor.scheduleAtFixedRate(sysMonitor, 0, 30, TimeUnit.SECONDS);
+			// SigarSystemMonitor sysMonitor = SigarSystemMonitor.getInstance(
+			// configProperties.getProperty("memory.file.dir"), streamRate,
+			// configProperties.getProperty("image.save.directory"));
+			// sysMonitor.setCpuUsageScalefactor((Double.parseDouble(configProperties
+			// .getProperty("cpu.usage.scale.factor"))));
+			// executor.scheduleAtFixedRate(sysMonitor, 0, 30,
+			// TimeUnit.SECONDS);
 
 			// Bolt for computing the median from the archive streams
 			// long archiveloadStart = archiveStartTime;
@@ -159,13 +167,15 @@ public class PlatformCore {
 			// After 24 hours all but one archive thread can be cancelled since
 			// the median values for other time slices are stored in memory.
 
+			System.out.println(configProperties.getProperty("ingestion.file.dir"));
+
 			ConcurrentLinkedQueue<SmartPlugBean> liveStreamBuffer = new ConcurrentLinkedQueue<SmartPlugBean>();
 
 			LiveStreamSpout<SmartPlugBean> liveStreamLoadSpout = new LiveStreamSpout<SmartPlugBean>(
 					liveStreamBuffer, executor, streamRate, SERVER_PORT,
 					configProperties.getProperty("ingestion.file.dir"),
 					configProperties.getProperty("image.save.directory"), new Fields("livebean",
-							"houseId", "householdId", "plugId"));
+							"houseId", "householdId", "plugId"), monitor);
 
 			core.builder.setSpout("live_stream", liveStreamLoadSpout);
 
@@ -243,11 +253,29 @@ public class PlatformCore {
 					"Query2AOutlierEstimator");
 
 			Config conf = new Config();
-			conf.setNumWorkers(2);
+			conf.setNumWorkers(5);
 			conf.setDebug(false);
 
-			LocalCluster cluster = new LocalCluster();
-			cluster.submitTopology("test", conf, core.builder.createTopology());
+			if (isLocal) {
+				LocalCluster cluster = new LocalCluster();
+				cluster.submitTopology(topologyName, conf, core.builder.createTopology());
+			} else {
+
+				for (Entry<Object, Object> entry : configProperties.entrySet()) {
+					conf.put((String) entry.getKey(), entry.getValue());
+
+				}
+
+				conf.put("dbLoadRate", dbLoadRate);
+				conf.put("NUMBER_OF_DAYS_IN_ARCHIVE", NUMBER_OF_DAYS_IN_ARCHIVE);
+				conf.put("liveStartTime", liveStartTime);
+
+				conf.put(Config.NIMBUS_CHILDOPTS, "-Xmx2048m -Xms2048m  "
+						+ "-Xloggc:logs/gc1k2.log -XX:+PrintGCDetails -XX:+UseParallelOldGC "
+						+ "-XX:GCTimeRatio=4 -XX:NewRatio=2");
+				StormSubmitter.submitTopology(topologyName, conf, core.builder.createTopology());
+			}
+
 			// Utils.sleep(100000);
 			// cluster.killTopology("test");
 			// cluster.shutdown();
@@ -259,6 +287,10 @@ public class PlatformCore {
 
 		} catch (ParseException e) {
 			LOGGER.error("Error parsing archive stream start time", e);
+		} catch (AlreadyAliveException e) {
+			LOGGER.error("Error submitting topology to cluster", e);
+		} catch (InvalidTopologyException e) {
+			LOGGER.error("Error submitting topology to cluster", e);
 		}
 
 	}

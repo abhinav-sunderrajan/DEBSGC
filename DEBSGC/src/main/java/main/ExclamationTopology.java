@@ -2,6 +2,8 @@ package main;
 
 import java.util.Map;
 
+import org.apache.log4j.Logger;
+
 import spouts.TestWordSpout;
 import backtype.storm.Config;
 import backtype.storm.LocalCluster;
@@ -19,6 +21,7 @@ import backtype.storm.tuple.Values;
  * This is a basic example of a Storm topology.
  */
 public class ExclamationTopology {
+	private static final Logger LOGGER = Logger.getLogger(ExclamationTopology.class);
 
 	private static class ExclamationBolt extends BaseRichBolt {
 		OutputCollector _collector;
@@ -30,7 +33,8 @@ public class ExclamationTopology {
 
 		@Override
 		public void execute(Tuple tuple) {
-			System.out.println(tuple.getString(0));
+			LOGGER.info(tuple.getString(0));
+			// System.out.println(tuple.getString(0));
 			_collector.emit(tuple, new Values(tuple.getString(0) + "!!!"));
 			_collector.ack(tuple);
 		}
@@ -53,8 +57,8 @@ public class ExclamationTopology {
 		conf.setDebug(false);
 
 		if (args != null && args.length > 0) {
-			conf.setNumWorkers(3);
-
+			conf.setNumWorkers(1);
+			conf.put(Config.SUPERVISOR_CHILDOPTS, "-Xmx2048m -Xms2048m");
 			StormSubmitter.submitTopology(args[0], conf, builder.createTopology());
 		} else {
 

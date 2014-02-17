@@ -3,8 +3,6 @@ package bolts;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import main.PlatformCore;
-
 import org.apache.commons.collections.Buffer;
 import org.apache.commons.collections.BufferUtils;
 import org.apache.commons.collections.buffer.CircularFifoBuffer;
@@ -26,6 +24,8 @@ public class ArchiveMedianPerPlugBolt implements IRichBolt {
 	private static final long serialVersionUID = 1L;
 	private OutputCollector _collector;
 	private Fields outputFields;
+	private Map<String, ConcurrentHashMap<String, Buffer>> averageLoadPerPlugPerTimeSlice;
+	private Map stormConf;
 
 	/**
 	 * Initialize with a declaration of the output fields for clarity while
@@ -33,13 +33,16 @@ public class ArchiveMedianPerPlugBolt implements IRichBolt {
 	 * 
 	 * @param outputFields
 	 */
-	public ArchiveMedianPerPlugBolt(Fields outputFields) {
+	public ArchiveMedianPerPlugBolt(Fields outputFields,
+			Map<String, ConcurrentHashMap<String, Buffer>> averageLoadPerPlugPerTimeSlice) {
 		this.outputFields = outputFields;
+		this.averageLoadPerPlugPerTimeSlice = averageLoadPerPlugPerTimeSlice;
 	}
 
 	@Override
 	public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
 		_collector = collector;
+		this.stormConf = stormConf;
 
 	}
 
@@ -56,18 +59,18 @@ public class ArchiveMedianPerPlugBolt implements IRichBolt {
 
 			_collector.emit(new Values(bean, houseId, timeSlice));
 
-			if (PlatformCore.averageLoadPerPlugPerTimeSlice.containsKey(houseId + "_" + householdId
-					+ "_" + plugId)) {
+			if (averageLoadPerPlugPerTimeSlice.containsKey(houseId + "_" + householdId + "_"
+					+ plugId)) {
 
-				if (!PlatformCore.averageLoadPerPlugPerTimeSlice.get(
-						houseId + "_" + householdId + "_" + plugId).containsKey(timeSlice)) {
+				if (!averageLoadPerPlugPerTimeSlice.get(houseId + "_" + householdId + "_" + plugId)
+						.containsKey(timeSlice)) {
 					Buffer medianList = BufferUtils.synchronizedBuffer(new CircularFifoBuffer(
-							PlatformCore.NUMBER_OF_DAYS_IN_ARCHIVE));
+							(Integer) stormConf.get("NUMBER_OF_DAYS_IN_ARCHIVE")));
 					medianList.add(bean.getAverageLoad());
-					PlatformCore.averageLoadPerPlugPerTimeSlice.get(
-							houseId + "_" + householdId + "_" + plugId).put(timeSlice, medianList);
+					averageLoadPerPlugPerTimeSlice.get(houseId + "_" + householdId + "_" + plugId)
+							.put(timeSlice, medianList);
 				} else {
-					Buffer medianList = PlatformCore.averageLoadPerPlugPerTimeSlice.get(
+					Buffer medianList = averageLoadPerPlugPerTimeSlice.get(
 							houseId + "_" + householdId + "_" + plugId).get(timeSlice);
 					medianList.add(bean.getAverageLoad());
 				}
@@ -77,11 +80,11 @@ public class ArchiveMedianPerPlugBolt implements IRichBolt {
 				ConcurrentHashMap<String, Buffer> bufferMap = new ConcurrentHashMap<String, Buffer>();
 
 				Buffer medianList = BufferUtils.synchronizedBuffer(new CircularFifoBuffer(
-						PlatformCore.NUMBER_OF_DAYS_IN_ARCHIVE));
+						(Integer) stormConf.get("NUMBER_OF_DAYS_IN_ARCHIVE")));
 				medianList.add(bean.getAverageLoad());
 				bufferMap.put(timeSlice, medianList);
-				PlatformCore.averageLoadPerPlugPerTimeSlice.put(houseId + "_" + householdId + "_"
-						+ plugId, bufferMap);
+				averageLoadPerPlugPerTimeSlice.put(houseId + "_" + householdId + "_" + plugId,
+						bufferMap);
 
 			}
 		} else {

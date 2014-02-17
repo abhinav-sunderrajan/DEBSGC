@@ -6,10 +6,9 @@ import java.util.Calendar;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import main.PlatformCore;
-
 import org.apache.log4j.Logger;
 
+import redis.clients.jedis.Jedis;
 import backtype.storm.task.OutputCollector;
 import backtype.storm.task.TopologyContext;
 import backtype.storm.topology.IRichBolt;
@@ -27,6 +26,7 @@ public class Query2AOutlierEstimator implements IRichBolt {
 	private Fields outFields;
 	private static Calendar cal = Calendar.getInstance();
 	private static DateFormat df;
+	private Jedis jedis;
 	private static final Logger LOGGER = Logger.getLogger(Query2AOutlierEstimator.class);
 
 	public Query2AOutlierEstimator(Fields fields) {
@@ -37,6 +37,8 @@ public class Query2AOutlierEstimator implements IRichBolt {
 	public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
 		_collector = collector;
 		df = new SimpleDateFormat("dd-MMM-yyyy HH:mm:ss");
+		jedis = new Jedis("172.25.187.111", 6379);
+		LOGGER.info("Jedis server connected status is " + jedis.isConnected());
 
 	}
 
@@ -61,47 +63,69 @@ public class Query2AOutlierEstimator implements IRichBolt {
 		String timeFrame = timeStart + " TO " + timeEnd;
 
 		ConcurrentHashMap<String, Boolean> plugIdMap;
-		boolean isgreater = (medianLoad > globalMedian) ? true : false;
+		Boolean isgreater = (medianLoad > globalMedian) ? true : false;
 
-		if (PlatformCore.loadStatusMap.containsKey(houseId.shortValue())) {
-			plugIdMap = PlatformCore.loadStatusMap.get(houseId.shortValue());
-			if (plugIdMap.containsKey(householdId + "-" + plugId)) {
-
-				// Calculate change in percentage if and only if there is a
-				// change.
-				if (plugIdMap.get(householdId + "-" + plugId) != isgreater) {
-					// Update the change before calculating the percentage
-					// change.
-					plugIdMap.put(householdId + "-" + plugId, isgreater);
-					double percentage = calculatePercentagePlugsGreater(plugIdMap);
-					_collector.emit(new Values(timeFrame, houseId, percentage, (System
-							.currentTimeMillis() - queryEvalTime)));
-				} else {
-					_collector.emit(new Values(timeFrame, null, null, null));
-				}
-			} else {
-				plugIdMap.put(householdId + "-" + plugId, isgreater);
-				double percentage = calculatePercentagePlugsGreater(plugIdMap);
-				_collector.emit(new Values(timeFrame, houseId, percentage, (System
-						.currentTimeMillis() - queryEvalTime)));
-			}
-		} else {
-			plugIdMap = new ConcurrentHashMap<String, Boolean>();
-			plugIdMap.put(householdId + "-" + plugId, isgreater);
-			PlatformCore.loadStatusMap.put(houseId.shortValue(), plugIdMap);
+		if (!jedis.hexists(houseId.toString(), householdId + "-" + plugId)) {
+			jedis.hset(houseId.toString(), householdId + "-" + plugId, isgreater.toString());
 			if (isgreater) {
 				_collector.emit(new Values(timeFrame, houseId, 100.0,
 						(System.currentTimeMillis() - queryEvalTime)));
 			} else {
-				_collector.emit(new Values(timeFrame, null, null, null));
+				// _collector.emit(new Values(timeFrame, null, null, null));
+			}
+		} else {
+			Boolean value = Boolean.valueOf(jedis.hget(houseId.toString(), householdId + "-"
+					+ plugId));
+			if (value != isgreater) {
+				jedis.hset(houseId.toString(), householdId + "-" + plugId, value.toString());
+				double percentage = calculatePercentagePlugsGreater(jedis.hgetAll(houseId
+						.toString()));
+				_collector.emit(new Values(timeFrame, houseId, percentage, (System
+						.currentTimeMillis() - queryEvalTime)));
+			} else {
+				// _collector.emit(new Values(timeFrame, null, null, null));
 			}
 		}
+
+		// if (PlatformCore.loadStatusMap.containsKey(houseId.shortValue())) {
+		// plugIdMap = PlatformCore.loadStatusMap.get(houseId.shortValue());
+		// if (plugIdMap.containsKey(householdId + "-" + plugId)) {
+		//
+		// // Calculate change in percentage if and only if there is a
+		// // change.
+		// if (plugIdMap.get(householdId + "-" + plugId) != isgreater) {
+		// // Update the change before calculating the percentage
+		// // change.
+		// plugIdMap.put(householdId + "-" + plugId, isgreater);
+		// double percentage = calculatePercentagePlugsGreater(plugIdMap);
+		// _collector.emit(new Values(timeFrame, houseId, percentage, (System
+		// .currentTimeMillis() - queryEvalTime)));
+		// } else {
+		// _collector.emit(new Values(timeFrame, null, null, null));
+		// }
+		// } else {
+		// plugIdMap.put(householdId + "-" + plugId, isgreater);
+		// double percentage = calculatePercentagePlugsGreater(plugIdMap);
+		// _collector.emit(new Values(timeFrame, houseId, percentage, (System
+		// .currentTimeMillis() - queryEvalTime)));
+		// }
+		// } else {
+		// plugIdMap = new ConcurrentHashMap<String, Boolean>();
+		// plugIdMap.put(householdId + "-" + plugId, isgreater);
+		// PlatformCore.loadStatusMap.put(houseId.shortValue(), plugIdMap);
+		// if (isgreater) {
+		// _collector.emit(new Values(timeFrame, houseId, 100.0,
+		// (System.currentTimeMillis() - queryEvalTime)));
+		// } else {
+		// _collector.emit(new Values(timeFrame, null, null, null));
+		// }
+		// }
 
 	}
 
 	@Override
 	public void cleanup() {
-
+		jedis.disconnect();
 	}
 
 	@Override
@@ -115,13 +139,13 @@ public class Query2AOutlierEstimator implements IRichBolt {
 		return null;
 	}
 
-	private double calculatePercentagePlugsGreater(ConcurrentHashMap<String, Boolean> plugIdMap) {
+	private double calculatePercentagePlugsGreater(Map<String, String> map) {
 
 		int above = 0;
 		int below = 0;
 
-		for (Boolean value : plugIdMap.values()) {
-			if (value) {
+		for (String value : map.values()) {
+			if (Boolean.valueOf(value)) {
 				above++;
 			} else {
 				below++;

@@ -71,9 +71,9 @@ public class CurrentLoadAvgPerPlugBolt implements IRichBolt {
 		cepConfig.addEventType("SmartPlugBean", SmartPlugBean.class.getName());
 		cepRT = cep.getEPRuntime();
 		cepAdm = cep.getEPAdministrator();
-		cepAdm.createEPL("create variable long LL = " + PlatformCore.liveStartTime);
+		cepAdm.createEPL("create variable long LL = " + stormConf.get("liveStartTime"));
 		cepAdm.createEPL("create variable long UL = "
-				+ (PlatformCore.liveStartTime + avgCalcInterval - 1000));
+				+ ((Long) stormConf.get("liveStartTime") + avgCalcInterval - 1000));
 		cepAdm.createEPL("on beans.SmartPlugBean(timestamp > UL) set LL=(LL+" + avgCalcInterval
 				+ "), UL=(UL+" + avgCalcInterval + ") ");
 		EPStatement cepStatement = cepAdm

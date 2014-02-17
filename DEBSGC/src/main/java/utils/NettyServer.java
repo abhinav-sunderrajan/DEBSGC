@@ -3,14 +3,10 @@ package utils;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-
-import main.PlatformCore;
 
 import org.apache.log4j.Logger;
 import org.jboss.netty.bootstrap.ServerBootstrap;
@@ -30,8 +26,6 @@ import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory;
 import org.jboss.netty.handler.codec.serialization.ClassResolvers;
 import org.jboss.netty.handler.codec.serialization.ObjectDecoder;
 import org.jboss.netty.handler.codec.serialization.ObjectEncoder;
-import org.jfree.data.time.Minute;
-import org.jfree.data.time.TimeSeries;
 
 import beans.SmartPlugBean;
 import display.StreamJoinDisplay;
@@ -79,16 +73,21 @@ public class NettyServer<E> {
 			bootstrap.setOption("child.keepAlive", true);
 			this.buffer = buffer;
 			this.streamRate = streamRate;
-			display = StreamJoinDisplay.getInstance("Join Performance Measure", imageSaveDirectory);
-			display.addToDataSeries(new TimeSeries("Ingestion rate in messages per second",
-					Minute.class), 3);
-			valueMap = new HashMap<Integer, Double>();
-			valueMap.put(3, 0.0);
-			writeFile = new FileWriter(writeFileDir + "Ingestion_" + Integer.toString(streamRate)
-					+ ".csv");
-			PlatformCore.executor.scheduleAtFixedRate(new IngestionMeasure(), 30, 30,
-					TimeUnit.SECONDS);
-		} catch (IOException e) {
+			// display =
+			// StreamJoinDisplay.getInstance("Join Performance Measure",
+			// imageSaveDirectory);
+			// display.addToDataSeries(new
+			// TimeSeries("Ingestion rate in messages per second",
+			// Minute.class), 3);
+			// valueMap = new HashMap<Integer, Double>();
+			// valueMap.put(3, 0.0);
+			// writeFile = new FileWriter(writeFileDir + "Ingestion_" +
+			// Integer.toString(streamRate)
+			// + ".csv");
+			// PlatformCore.executor.scheduleAtFixedRate(new IngestionMeasure(),
+			// 30, 30,
+			// TimeUnit.SECONDS);
+		} catch (Exception e) {
 			LOGGER.error("Error writing ingestion to csv file", e);
 		}
 

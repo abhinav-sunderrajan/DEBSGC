@@ -38,7 +38,6 @@ public class DatabaseInsertorBolt implements IRichBolt {
 	 */
 	public DatabaseInsertorBolt(Properties connectionProperties) {
 		access.openDBConnection(connectionProperties);
-		attachShutDownHook();
 
 	}
 
@@ -72,7 +71,12 @@ public class DatabaseInsertorBolt implements IRichBolt {
 
 	@Override
 	public void cleanup() {
-		// TODO Auto-generated method stub
+		try {
+			LOGGER.info("CLose database connection before exit");
+			access.closeConnection();
+		} catch (SQLException e) {
+			LOGGER.error("Error closing database connection", e);
+		}
 
 	}
 
@@ -86,20 +90,6 @@ public class DatabaseInsertorBolt implements IRichBolt {
 	public Map<String, Object> getComponentConfiguration() {
 		// TODO Auto-generated method stub
 		return null;
-	}
-
-	private void attachShutDownHook() {
-		Runtime.getRuntime().addShutdownHook(new Thread() {
-			@Override
-			public void run() {
-				try {
-					LOGGER.info("CLose database connection before exit");
-					access.closeConnection();
-				} catch (SQLException e) {
-					LOGGER.error("Error closing database connection", e);
-				}
-			}
-		});
 	}
 
 }

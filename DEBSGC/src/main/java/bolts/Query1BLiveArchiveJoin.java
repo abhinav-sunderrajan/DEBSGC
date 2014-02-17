@@ -2,8 +2,7 @@ package bolts;
 
 import java.util.Calendar;
 import java.util.Map;
-
-import main.PlatformCore;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.commons.collections.Buffer;
 import org.apache.commons.math.stat.descriptive.DescriptiveStatistics;
@@ -29,16 +28,21 @@ public class Query1BLiveArchiveJoin implements IRichBolt {
 	private transient DescriptiveStatistics stats;
 	private Fields outFields;
 	private static int count = 0;
+	private Map stormConf;
+	private Map<String, ConcurrentHashMap<String, Buffer>> averageLoadPerPlugPerTimeSlice;
 	private static final Logger LOGGER = Logger.getLogger(Query1BLiveArchiveJoin.class);
 
-	public Query1BLiveArchiveJoin(Fields outFields) {
+	public Query1BLiveArchiveJoin(Fields outFields,
+			Map<String, ConcurrentHashMap<String, Buffer>> averageLoadPerPlugPerTimeSlice) {
 		this.outFields = outFields;
+		this.averageLoadPerPlugPerTimeSlice = averageLoadPerPlugPerTimeSlice;
 	}
 
 	@Override
 	public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
 		stats = new DescriptiveStatistics();
 		_collector = collector;
+		this.stormConf = stormConf;
 
 	}
 
@@ -49,20 +53,20 @@ public class Query1BLiveArchiveJoin implements IRichBolt {
 		short householdId = currentLoad.getHouseHoldId();
 		short plugId = currentLoad.getPlugId();
 
-		cal.setTimeInMillis(currentLoad.getCurrTime() + 2 * PlatformCore.SLICE_IN_MINUTES * 60
-				* 1000);
+		cal.setTimeInMillis(currentLoad.getCurrTime() + 2
+				* (Integer) stormConf.get("SLICE_IN_MINUTES") * 60 * 1000);
 		int hrs = cal.get(Calendar.HOUR);
 		int mnts = cal.get(Calendar.MINUTE);
 		String predTimeStart = String.format("%02d:%02d", hrs, mnts);
-		cal.setTimeInMillis(currentLoad.getCurrTime() + 3 * PlatformCore.SLICE_IN_MINUTES * 60
-				* 1000);
+		cal.setTimeInMillis(currentLoad.getCurrTime() + 3
+				* (Integer) stormConf.get("SLICE_IN_MINUTES") * 60 * 1000);
 		hrs = cal.get(Calendar.HOUR);
 		mnts = cal.get(Calendar.MINUTE);
 		String predTimeEnd = String.format("%02d:%02d", hrs, mnts);
 
 		String key = predTimeStart + " TO " + predTimeEnd;
 
-		Buffer values = PlatformCore.averageLoadPerPlugPerTimeSlice.get(
+		Buffer values = this.averageLoadPerPlugPerTimeSlice.get(
 				houseId + "_" + householdId + "_" + plugId).get(key);
 
 		if (values != null) {
