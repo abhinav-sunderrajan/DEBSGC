@@ -1,6 +1,5 @@
 package bolts;
 
-import java.sql.Timestamp;
 import java.util.Calendar;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -86,7 +85,7 @@ public class Query1ALiveArchiveJoin implements IRichBolt {
 
 		count++;
 		if (count % 1000 == 0) {
-			System.out.println(new Timestamp(currentLoad.getCurrTime()));
+			LOGGER.info(key + " " + values);
 		}
 
 	}

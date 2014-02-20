@@ -37,6 +37,7 @@ public class CurrentLoadAvgPerHouseBolt implements IRichBolt {
 	private OutputCollector _collector;
 	private long avgCalcInterval;
 	private Fields outFields;
+	private int count = 0;
 	private static final Logger LOGGER = Logger.getLogger(CurrentLoadAvgPerHouseBolt.class);
 
 	/**
@@ -55,6 +56,10 @@ public class CurrentLoadAvgPerHouseBolt implements IRichBolt {
 	public void update(Integer houseId, Double averageLoad, Long timestamp, Long evaluationTime) {
 		_collector.emit(new Values(houseId, new CurrentLoadPerHouseBean(houseId.shortValue(),
 				averageLoad, timestamp, evaluationTime)));
+		count++;
+		// if (count % 1000 == 0) {
+		// LOGGER.info(houseId + " " + new Timestamp(timestamp));
+		// }
 	}
 
 	@Override

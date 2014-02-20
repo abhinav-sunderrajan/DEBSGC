@@ -37,6 +37,7 @@ public class ArchiveStreamSpout<E> extends BaseRichSpout {
 	private ConcurrentLinkedQueue<HistoryBean> archiveStreamBufferArr;
 	private Long startTime;
 	private Map conf;
+	private int count = 0;
 
 	@Override
 	public void open(Map conf, TopologyContext context, SpoutOutputCollector collector) {
@@ -69,6 +70,11 @@ public class ArchiveStreamSpout<E> extends BaseRichSpout {
 				HistoryBean historyBean = (HistoryBean) obj;
 				_collector.emit(new Values(historyBean, historyBean.getHouseId(), historyBean
 						.getHouseholdId(), historyBean.getPlugId(), historyBean.getTimeSlice()));
+				count++;
+				if (count % 1000 == 0) {
+					System.out.println(historyBean.getHouseholdId() + historyBean.getPlugId() + " "
+							+ historyBean.getTimeSlice());
+				}
 			}
 		}
 

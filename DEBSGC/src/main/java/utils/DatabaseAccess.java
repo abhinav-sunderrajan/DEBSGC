@@ -68,7 +68,7 @@ public class DatabaseAccess {
 	 * @return
 	 */
 	public ResultSet retrieveQueryResult(String queryString) {
-		System.out.println(queryString);
+		LOGGER.info(queryString);
 
 		ResultSet resultSet = null;
 		try {

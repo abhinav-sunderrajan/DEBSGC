@@ -35,18 +35,20 @@ public class ArchiveMedianPerHouseBolt implements IRichBolt {
 	private Redisson redisson;
 	private Map<Short, ConcurrentHashMap<String, CircularList<Double>>> averageLoadPerHousePerTimeSlice;
 	private static final Logger LOGGER = Logger.getLogger(ArchiveMedianPerHouseBolt.class);
-	private Map stormConf;
+	private Long bufferSize;
 
 	public void update(Short houseId, String timeSlice, Double averageLoad) {
-
 		// LOGGER.info("average for " + houseId + " at " + timeSlice + " is " +
 		// averageLoad);
 		if (averageLoadPerHousePerTimeSlice.containsKey(houseId)) {
 			if (!averageLoadPerHousePerTimeSlice.get(houseId).containsKey(timeSlice)) {
-				CircularList<Double> medianList = new CircularList<Double>(
-						(Integer) stormConf.get("NUMBER_OF_DAYS_IN_ARCHIVE"));
+				CircularList<Double> medianList = new CircularList<Double>(bufferSize.intValue());
 				medianList.add(averageLoad);
-				averageLoadPerHousePerTimeSlice.get(houseId).put(timeSlice, medianList);
+				ConcurrentHashMap<String, CircularList<Double>> bufferMap = averageLoadPerHousePerTimeSlice
+						.get(houseId);
+				bufferMap.put(timeSlice, medianList);
+				averageLoadPerHousePerTimeSlice.put(houseId, bufferMap);
+
 			} else {
 				CircularList<Double> medianList = averageLoadPerHousePerTimeSlice.get(houseId).get(
 						timeSlice);
@@ -55,7 +57,6 @@ public class ArchiveMedianPerHouseBolt implements IRichBolt {
 		} else {
 
 			ConcurrentHashMap<String, CircularList<Double>> bufferMap = new ConcurrentHashMap<String, CircularList<Double>>();
-			Long bufferSize = (Long) stormConf.get("NUMBER_OF_DAYS_IN_ARCHIVE");
 
 			CircularList<Double> medianList = new CircularList<Double>(bufferSize.intValue());
 			medianList.add(averageLoad);
@@ -68,7 +69,6 @@ public class ArchiveMedianPerHouseBolt implements IRichBolt {
 
 	@Override
 	public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
-		this.stormConf = stormConf;
 		cepConfig = new Configuration();
 		cepConfig.getEngineDefaults().getThreading().setListenerDispatchPreserveOrder(false);
 		cep = EPServiceProviderManager.getProvider("ArchiveMedianPerHouseBolt_" + this.hashCode(),
@@ -76,6 +76,7 @@ public class ArchiveMedianPerHouseBolt implements IRichBolt {
 		cepConfig.addEventType("HistoryBean", HistoryBean.class.getName());
 		cepRT = cep.getEPRuntime();
 		cepAdm = cep.getEPAdministrator();
+		bufferSize = (Long) stormConf.get("NUMBER_OF_DAYS_IN_ARCHIVE");
 
 		EPStatement cepStatement = cepAdm.createEPL("@Hint('reclaim_group_aged="
 				+ stormConf.get("dbLoadRate") + "')"
