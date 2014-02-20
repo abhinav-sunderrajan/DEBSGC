@@ -2,15 +2,20 @@ package streamers;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 import main.PlatformCore;
 
 import org.apache.log4j.Logger;
+import org.redisson.Redisson;
+import org.redisson.core.MessageListener;
+import org.redisson.core.RTopic;
 
 import utils.DatabaseAccess;
 import beans.HistoryBean;
@@ -21,11 +26,11 @@ public class ArchiveLoader<T> implements Runnable {
 	private long endTime;
 	private int count;
 	private Calendar cal;
-	private int queueIndex;
 	private Set<Short> houseIdList;
-	private int sliceInMinutes;
-	private Integer monitor;
-	private List<ConcurrentLinkedQueue<HistoryBean>> archiveStreamBufferArr;
+	private long sliceInMinutes;
+	private ConcurrentLinkedQueue<HistoryBean> archiveStreamBufferArr;
+	private Redisson redisson;
+	private RTopic<Integer> monitor;
 	private static final Logger LOGGER = Logger.getLogger(ArchiveLoader.class);
 
 	/**
@@ -33,19 +38,23 @@ public class ArchiveLoader<T> implements Runnable {
 	 * @param buffer
 	 * @param monitor
 	 * @param startTime
+	 * @param rediserverIp
 	 */
-	public ArchiveLoader(int queueIndex, final long startTime, String url, String userName,
-			String password, int sliceInMinutes, Integer monitor,
-			List<ConcurrentLinkedQueue<HistoryBean>> archiveStreamBufferArr) {
-		dbconnect.openDBConnection(url, userName, password);
+	public ArchiveLoader(Properties connectionProperties,
+			ConcurrentLinkedQueue<HistoryBean> archiveStreamBufferArr, long sliceInMinutes,
+			long startTime, String rediserverIp) {
+		dbconnect.openDBConnection(connectionProperties);
 		this.sliceInMinutes = sliceInMinutes;
-		this.monitor = monitor;
 		houseIdList = new HashSet<Short>();
 		this.startTime = startTime;
 		this.endTime = startTime + (sliceInMinutes * 60 * 1000);
 		cal = Calendar.getInstance();
 		this.archiveStreamBufferArr = archiveStreamBufferArr;
-		this.queueIndex = queueIndex;
+
+		org.redisson.Config redissonConfig = new org.redisson.Config();
+		redissonConfig.addAddress(rediserverIp + ":6379");
+		redisson = Redisson.create(redissonConfig);
+		monitor = redisson.getTopic("monitor");
 	}
 
 	@Override
@@ -82,7 +91,7 @@ public class ArchiveLoader<T> implements Runnable {
 				timeSlice = predTimeStart + " TO " + predTimeEnd;
 				bean.setTimeSlice(timeSlice);
 
-				archiveStreamBufferArr.get(queueIndex).add(bean);
+				archiveStreamBufferArr.add(bean);
 			}
 			// Create a punctuation event for each house id after each database
 			// load
@@ -90,18 +99,29 @@ public class ArchiveLoader<T> implements Runnable {
 			for (short houseId : houseIdList) {
 				HistoryBean punctuation = new HistoryBean(houseId, (short) -1, (short) -1, -1.0f,
 						1, timeSlice);
-				archiveStreamBufferArr.get(queueIndex).add(punctuation);
+				archiveStreamBufferArr.add(punctuation);
 			}
 			houseIdList.clear();
 			// End of punctuation events
 
 			count++;
 			if (count == 1) {
-				synchronized (this.monitor) {
-					LOGGER.info("Wait for live streams before further database loading");
-					this.monitor.wait();
-					LOGGER.info("Receiving live streams. Start database load normally");
+				LOGGER.info("Wait for live streams before further database loading");
+				final List<Integer> stupid = new ArrayList<>();
+
+				monitor.addListener(new MessageListener<Integer>() {
+
+					public void onMessage(Integer message) {
+						stupid.add(1);
+					}
+				});
+
+				while (stupid.size() == 0) {
+					// very bad implementation but do not how else
+					Thread.sleep(500);
 				}
+
+				LOGGER.info("Receiving live streams. Start database load normally");
 			}
 
 			// Update the time stamps for the next fetch.
@@ -111,7 +131,8 @@ public class ArchiveLoader<T> implements Runnable {
 		} catch (SQLException e) {
 			LOGGER.error("Error accessing the database to retrieve archived data", e);
 		} catch (InterruptedException e) {
-			LOGGER.error("Error waking the sleeping threads", e);
+			// TODO Auto-generated catch block
+			e.printStackTrace();
 		}
 
 	}

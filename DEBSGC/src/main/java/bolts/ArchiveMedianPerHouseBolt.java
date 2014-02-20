@@ -3,11 +3,11 @@ package bolts;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.apache.commons.collections.Buffer;
-import org.apache.commons.collections.BufferUtils;
-import org.apache.commons.collections.buffer.CircularFifoBuffer;
 import org.apache.log4j.Logger;
+import org.redisson.Config;
+import org.redisson.Redisson;
 
+import utils.CircularList;
 import backtype.storm.task.OutputCollector;
 import backtype.storm.task.TopologyContext;
 import backtype.storm.topology.IRichBolt;
@@ -32,37 +32,32 @@ public class ArchiveMedianPerHouseBolt implements IRichBolt {
 	private transient EPAdministrator cepAdm;
 	private transient Configuration cepConfig;
 	private transient EPRuntime cepRT;
-	private Map<Short, ConcurrentHashMap<String, Buffer>> averageLoadPerHousePerTimeSlice;
-	private static transient final Logger LOGGER = Logger
-			.getLogger(ArchiveMedianPerHouseBolt.class);
+	private Redisson redisson;
+	private Map<Short, ConcurrentHashMap<String, CircularList<Double>>> averageLoadPerHousePerTimeSlice;
+	private static final Logger LOGGER = Logger.getLogger(ArchiveMedianPerHouseBolt.class);
 	private Map stormConf;
 
-	public ArchiveMedianPerHouseBolt(
-			Map<Short, ConcurrentHashMap<String, Buffer>> averageLoadPerHousePerTimeSlice) {
-		this.averageLoadPerHousePerTimeSlice = averageLoadPerHousePerTimeSlice;
-
-	}
-
-	@SuppressWarnings("unchecked")
 	public void update(Short houseId, String timeSlice, Double averageLoad) {
 
-		LOGGER.info("average for " + houseId + " at " + timeSlice + " is " + averageLoad);
+		// LOGGER.info("average for " + houseId + " at " + timeSlice + " is " +
+		// averageLoad);
 		if (averageLoadPerHousePerTimeSlice.containsKey(houseId)) {
 			if (!averageLoadPerHousePerTimeSlice.get(houseId).containsKey(timeSlice)) {
-				Buffer medianList = BufferUtils.synchronizedBuffer(new CircularFifoBuffer(
-						(Integer) stormConf.get("NUMBER_OF_DAYS_IN_ARCHIVE")));
+				CircularList<Double> medianList = new CircularList<Double>(
+						(Integer) stormConf.get("NUMBER_OF_DAYS_IN_ARCHIVE"));
 				medianList.add(averageLoad);
 				averageLoadPerHousePerTimeSlice.get(houseId).put(timeSlice, medianList);
 			} else {
-				Buffer medianList = averageLoadPerHousePerTimeSlice.get(houseId).get(timeSlice);
+				CircularList<Double> medianList = averageLoadPerHousePerTimeSlice.get(houseId).get(
+						timeSlice);
 				medianList.add(averageLoad);
 			}
 		} else {
 
-			ConcurrentHashMap<String, Buffer> bufferMap = new ConcurrentHashMap<String, Buffer>();
+			ConcurrentHashMap<String, CircularList<Double>> bufferMap = new ConcurrentHashMap<String, CircularList<Double>>();
+			Long bufferSize = (Long) stormConf.get("NUMBER_OF_DAYS_IN_ARCHIVE");
 
-			Buffer medianList = BufferUtils.synchronizedBuffer(new CircularFifoBuffer(
-					(Integer) stormConf.get("NUMBER_OF_DAYS_IN_ARCHIVE")));
+			CircularList<Double> medianList = new CircularList<Double>(bufferSize.intValue());
 			medianList.add(averageLoad);
 			bufferMap.put(timeSlice, medianList);
 			averageLoadPerHousePerTimeSlice.put(houseId, bufferMap);
@@ -88,6 +83,13 @@ public class ArchiveMedianPerHouseBolt implements IRichBolt {
 				+ ".std:groupwin(houseId,timeSlice).win:expr_batch(averageLoad<0.0,false)"
 				+ ".stat:weighted_avg(averageLoad,readingsCount) " + "group by houseId,timeSlice");
 		cepStatement.setSubscriber(this);
+
+		Config config = new Config();
+
+		// Redisson will use load balance connections between listed servers
+		config.addAddress(stormConf.get("redis.server") + ":6379");
+		redisson = Redisson.create();
+		averageLoadPerHousePerTimeSlice = redisson.getMap("query1a");
 
 	}
 

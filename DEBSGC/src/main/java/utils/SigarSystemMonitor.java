@@ -2,7 +2,6 @@ package utils;
 
 import java.io.FileWriter;
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.log4j.Logger;
@@ -11,11 +10,6 @@ import org.hyperic.sigar.CpuInfo;
 import org.hyperic.sigar.Mem;
 import org.hyperic.sigar.Sigar;
 import org.hyperic.sigar.SigarException;
-import org.jfree.data.time.Minute;
-import org.jfree.data.time.TimeSeries;
-import org.jfree.data.time.TimeSeriesCollection;
-
-import display.TimeSeriesDisplay;
 
 /**
  * 
@@ -31,9 +25,7 @@ public class SigarSystemMonitor implements Runnable {
 	private Sigar sigar;
 	private static SigarSystemMonitor instance;
 	private static final Logger LOGGER = Logger.getLogger(SigarSystemMonitor.class);
-	private TimeSeriesDisplay display;
 	private double cpuUsageScalefactor;
-	private Map<Integer, Double> valueMap;
 	private static FileWriter writeFile;
 
 	/**
@@ -43,17 +35,6 @@ public class SigarSystemMonitor implements Runnable {
 	private SigarSystemMonitor(String imageSaveDirectory) {
 		sigar = new Sigar();
 		// Settings for display. The code is ugly need to figure out a better
-		// way
-		// of doing things here.
-		display = new TimeSeriesDisplay("System Parameters", imageSaveDirectory,
-				new TimeSeriesCollection());
-		valueMap = new HashMap<Integer, Double>();
-		display.addToDataSeries(new TimeSeries("Total Free Memory %", Minute.class), 1);
-		valueMap.put(1, 0.0);
-		display.addToDataSeries(new TimeSeries("JVM Free Memory %", Minute.class), 2);
-		valueMap.put(2, 0.0);
-		display.addToDataSeries(new TimeSeries("CPU kernel time scaled down", Minute.class), 3);
-		valueMap.put(3, 0.0);
 
 		// End of settings for display
 		try {
@@ -115,11 +96,6 @@ public class SigarSystemMonitor implements Runnable {
 			long actualUsed = mem.getActualUsed();
 			long jvmFree = Runtime.getRuntime().freeMemory();
 			long jvmTotal = Runtime.getRuntime().totalMemory();
-			// Update display values and send to chart
-			valueMap.put(1, mem.getFreePercent());
-			valueMap.put(2, ((jvmFree * 100.0) / jvmTotal));
-			valueMap.put(3, cpu.getSys() / cpuUsageScalefactor);
-			display.refreshDisplayValues(valueMap);
 
 			writeFile.append(Double.toString((jvmFree * 100.0) / jvmTotal));
 			writeFile.append("\n");

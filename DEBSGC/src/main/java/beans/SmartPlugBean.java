@@ -2,6 +2,8 @@ package beans;
 
 import java.io.Serializable;
 
+import com.lmax.disruptor.EventFactory;
+
 public class SmartPlugBean implements Serializable {
 
 	/**
@@ -17,6 +19,11 @@ public class SmartPlugBean implements Serializable {
 	private short houseId;
 	private double globalMedian;
 	private long queryEvalTime;
+	public final static EventFactory<SmartPlugBean> EVENT_FACTORY = new EventFactory<SmartPlugBean>() {
+		public SmartPlugBean newInstance() {
+			return new SmartPlugBean();
+		}
+	};
 
 	/**
 	 * @param id

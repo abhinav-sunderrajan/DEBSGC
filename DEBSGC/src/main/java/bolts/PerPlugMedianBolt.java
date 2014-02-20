@@ -5,7 +5,7 @@ import java.util.Map;
 
 import org.apache.log4j.Logger;
 
-import utils.EsperQueries;
+import utils.ProjectUtils;
 import backtype.storm.task.OutputCollector;
 import backtype.storm.task.TopologyContext;
 import backtype.storm.topology.IRichBolt;
@@ -49,7 +49,7 @@ public class PerPlugMedianBolt implements IRichBolt {
 		cep = EPServiceProviderManager.getProvider("PerHouseStatisticBolt", cepConfig);
 		cepConfig.addEventType("SmartPlugBean", SmartPlugBean.class.getName());
 
-		String queries[] = EsperQueries.getMedianLoadPerPlugPerHour();
+		String queries[] = ProjectUtils.getMedianLoadPerPlugPerHour();
 		EPStatement cepStatement = null;
 		cepRT = cep.getEPRuntime();
 		cepAdm = cep.getEPAdministrator();

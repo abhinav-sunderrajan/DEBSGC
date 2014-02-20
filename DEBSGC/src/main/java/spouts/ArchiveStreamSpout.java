@@ -1,10 +1,15 @@
 package spouts;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
+import streamers.ArchiveLoader;
 import backtype.storm.Config;
 import backtype.storm.spout.SpoutOutputCollector;
 import backtype.storm.task.TopologyContext;
@@ -27,30 +32,39 @@ public class ArchiveStreamSpout<E> extends BaseRichSpout {
 	private static final long serialVersionUID = 1L;
 	private SpoutOutputCollector _collector;
 	private static final boolean _isDistributed = false;
-	private int queueIndex;
-	private List<ConcurrentLinkedQueue<HistoryBean>> archiveStreamBufferArr;
+	private Properties connectionProperties;
+	private ScheduledExecutorService executor;
+	private ConcurrentLinkedQueue<HistoryBean> archiveStreamBufferArr;
+	private Long startTime;
+	private Map conf;
 
 	@Override
 	public void open(Map conf, TopologyContext context, SpoutOutputCollector collector) {
 		_collector = collector;
-
+		this.conf = conf;
+		executor = Executors.newScheduledThreadPool(1);
+		ScheduledFuture<?> future = executor.scheduleAtFixedRate(new ArchiveLoader<HistoryBean>(
+				connectionProperties, archiveStreamBufferArr, (long) conf.get("SLICE_IN_MINUTES"),
+				startTime, (String) conf.get("redis.server")), 0, (long) conf.get("dbLoadRate"),
+				TimeUnit.SECONDS);
 	}
 
-	public ArchiveStreamSpout(int queueIndex,
-			List<ConcurrentLinkedQueue<HistoryBean>> archiveStreamBufferArr) {
-		this.queueIndex = queueIndex;
+	public ArchiveStreamSpout(ConcurrentLinkedQueue<HistoryBean> archiveStreamBufferArr,
+			Properties connectionProperties, Long startTime) {
 		this.archiveStreamBufferArr = archiveStreamBufferArr;
+		this.connectionProperties = connectionProperties;
+		this.startTime = startTime;
 	}
 
 	@Override
 	public void nextTuple() {
 		while (true) {
-			if (archiveStreamBufferArr.get(queueIndex).isEmpty()) {
+			if (archiveStreamBufferArr.isEmpty()) {
 				Utils.sleep(500);
 				return;
 			}
 
-			E obj = (E) archiveStreamBufferArr.get(queueIndex).poll();
+			E obj = (E) archiveStreamBufferArr.poll();
 			if (obj instanceof HistoryBean) {
 				HistoryBean historyBean = (HistoryBean) obj;
 				_collector.emit(new Values(historyBean, historyBean.getHouseId(), historyBean

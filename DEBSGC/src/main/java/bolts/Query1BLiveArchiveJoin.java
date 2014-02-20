@@ -4,10 +4,12 @@ import java.util.Calendar;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.apache.commons.collections.Buffer;
 import org.apache.commons.math.stat.descriptive.DescriptiveStatistics;
 import org.apache.log4j.Logger;
+import org.redisson.Config;
+import org.redisson.Redisson;
 
+import utils.CircularList;
 import backtype.storm.task.OutputCollector;
 import backtype.storm.task.TopologyContext;
 import backtype.storm.topology.IRichBolt;
@@ -29,13 +31,12 @@ public class Query1BLiveArchiveJoin implements IRichBolt {
 	private Fields outFields;
 	private static int count = 0;
 	private Map stormConf;
-	private Map<String, ConcurrentHashMap<String, Buffer>> averageLoadPerPlugPerTimeSlice;
+	private Redisson redisson;
+	private Map<String, ConcurrentHashMap<String, CircularList<Double>>> averageLoadPerPlugPerTimeSlice;
 	private static final Logger LOGGER = Logger.getLogger(Query1BLiveArchiveJoin.class);
 
-	public Query1BLiveArchiveJoin(Fields outFields,
-			Map<String, ConcurrentHashMap<String, Buffer>> averageLoadPerPlugPerTimeSlice) {
+	public Query1BLiveArchiveJoin(Fields outFields) {
 		this.outFields = outFields;
-		this.averageLoadPerPlugPerTimeSlice = averageLoadPerPlugPerTimeSlice;
 	}
 
 	@Override
@@ -43,6 +44,13 @@ public class Query1BLiveArchiveJoin implements IRichBolt {
 		stats = new DescriptiveStatistics();
 		_collector = collector;
 		this.stormConf = stormConf;
+		Config config = new Config();
+		config.setConnectionPoolSize(2);
+
+		// Redisson will use load balance connections between listed servers
+		config.addAddress("172.25.187.111:6379");
+		redisson = Redisson.create(config);
+		averageLoadPerPlugPerTimeSlice = redisson.getMap("query1b");
 
 	}
 
@@ -66,7 +74,7 @@ public class Query1BLiveArchiveJoin implements IRichBolt {
 
 		String key = predTimeStart + " TO " + predTimeEnd;
 
-		Buffer values = this.averageLoadPerPlugPerTimeSlice.get(
+		CircularList<Double> values = averageLoadPerPlugPerTimeSlice.get(
 				houseId + "_" + householdId + "_" + plugId).get(key);
 
 		if (values != null) {

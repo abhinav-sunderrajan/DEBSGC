@@ -5,6 +5,9 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ScheduledExecutorService;
 
+import org.redisson.Redisson;
+import org.redisson.core.RTopic;
+
 import utils.NettyServer;
 import backtype.storm.Config;
 import backtype.storm.spout.SpoutOutputCollector;
@@ -36,7 +39,8 @@ public class LiveStreamSpout<E> extends BaseRichSpout {
 	private String writeFileDir;
 	private String imageSaveDirectory;
 	private int port;
-	private Integer monitor;
+	private transient Redisson redisson;
+	private transient RTopic<Integer> monitor;
 
 	/**
 	 * 
@@ -53,16 +57,13 @@ public class LiveStreamSpout<E> extends BaseRichSpout {
 	 */
 	public LiveStreamSpout(final ConcurrentLinkedQueue<E> buffer,
 			final ScheduledExecutorService executor, final int streamRate, final int port,
-			final String writeFileDir, final String imageSaveDirectory, final Fields outFields,
-			Integer monitor) {
+			final String writeFileDir, final String imageSaveDirectory, final Fields outFields) {
 		this.buffer = buffer;
 		this.outFields = outFields;
 		this.streamRate = streamRate;
 		this.writeFileDir = writeFileDir;
 		this.port = port;
 		this.imageSaveDirectory = imageSaveDirectory;
-		this.monitor = monitor;
-
 	}
 
 	@Override
@@ -73,6 +74,10 @@ public class LiveStreamSpout<E> extends BaseRichSpout {
 		NettyServer<E> server = new NettyServer<E>(buffer, streamRate, writeFileDir,
 				imageSaveDirectory);
 		server.listen(port);
+		org.redisson.Config redissonConfig = new org.redisson.Config();
+		redissonConfig.addAddress(conf.get("redis.server") + ":6379");
+		redisson = Redisson.create(redissonConfig);
+		monitor = redisson.getTopic("monitor");
 
 	}
 
@@ -84,7 +89,7 @@ public class LiveStreamSpout<E> extends BaseRichSpout {
 				return;
 			}
 			synchronized (this.monitor) {
-				this.monitor.notifyAll();
+				monitor.publish(111);
 			}
 			E obj = buffer.poll();
 			if (obj instanceof SmartPlugBean) {

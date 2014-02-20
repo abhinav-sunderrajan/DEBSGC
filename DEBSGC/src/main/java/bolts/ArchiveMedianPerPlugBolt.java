@@ -3,10 +3,10 @@ package bolts;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.apache.commons.collections.Buffer;
-import org.apache.commons.collections.BufferUtils;
-import org.apache.commons.collections.buffer.CircularFifoBuffer;
+import org.redisson.Config;
+import org.redisson.Redisson;
 
+import utils.CircularList;
 import backtype.storm.task.OutputCollector;
 import backtype.storm.task.TopologyContext;
 import backtype.storm.topology.IRichBolt;
@@ -24,7 +24,8 @@ public class ArchiveMedianPerPlugBolt implements IRichBolt {
 	private static final long serialVersionUID = 1L;
 	private OutputCollector _collector;
 	private Fields outputFields;
-	private Map<String, ConcurrentHashMap<String, Buffer>> averageLoadPerPlugPerTimeSlice;
+	private Redisson redisson;
+	private Map<String, ConcurrentHashMap<String, CircularList<Double>>> averageLoadPerPlugPerTimeSlice;
 	private Map stormConf;
 
 	/**
@@ -33,20 +34,23 @@ public class ArchiveMedianPerPlugBolt implements IRichBolt {
 	 * 
 	 * @param outputFields
 	 */
-	public ArchiveMedianPerPlugBolt(Fields outputFields,
-			Map<String, ConcurrentHashMap<String, Buffer>> averageLoadPerPlugPerTimeSlice) {
+	public ArchiveMedianPerPlugBolt(Fields outputFields) {
 		this.outputFields = outputFields;
-		this.averageLoadPerPlugPerTimeSlice = averageLoadPerPlugPerTimeSlice;
 	}
 
 	@Override
 	public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
 		_collector = collector;
 		this.stormConf = stormConf;
+		Config config = new Config();
+
+		// Redisson will use load balance connections between listed servers
+		config.addAddress(stormConf.get("redis.server") + ":6379");
+		redisson = Redisson.create(config);
+		averageLoadPerPlugPerTimeSlice = redisson.getMap("query1b");
 
 	}
 
-	@SuppressWarnings({ "unchecked" })
 	@Override
 	public void execute(Tuple input) {
 
@@ -64,24 +68,23 @@ public class ArchiveMedianPerPlugBolt implements IRichBolt {
 
 				if (!averageLoadPerPlugPerTimeSlice.get(houseId + "_" + householdId + "_" + plugId)
 						.containsKey(timeSlice)) {
-					Buffer medianList = BufferUtils.synchronizedBuffer(new CircularFifoBuffer(
-							(Integer) stormConf.get("NUMBER_OF_DAYS_IN_ARCHIVE")));
-					medianList.add(bean.getAverageLoad());
+					Long size = (Long) stormConf.get("NUMBER_OF_DAYS_IN_ARCHIVE");
+					CircularList<Double> medianList = new CircularList<Double>(size.intValue());
+					medianList.add((double) bean.getAverageLoad());
 					averageLoadPerPlugPerTimeSlice.get(houseId + "_" + householdId + "_" + plugId)
 							.put(timeSlice, medianList);
 				} else {
-					Buffer medianList = averageLoadPerPlugPerTimeSlice.get(
+					CircularList<Double> medianList = averageLoadPerPlugPerTimeSlice.get(
 							houseId + "_" + householdId + "_" + plugId).get(timeSlice);
-					medianList.add(bean.getAverageLoad());
+					medianList.add((double) bean.getAverageLoad());
 				}
 
 			} else {
 
-				ConcurrentHashMap<String, Buffer> bufferMap = new ConcurrentHashMap<String, Buffer>();
-
-				Buffer medianList = BufferUtils.synchronizedBuffer(new CircularFifoBuffer(
-						(Integer) stormConf.get("NUMBER_OF_DAYS_IN_ARCHIVE")));
-				medianList.add(bean.getAverageLoad());
+				ConcurrentHashMap<String, CircularList<Double>> bufferMap = new ConcurrentHashMap<String, CircularList<Double>>();
+				Long bufferSize = (Long) stormConf.get("NUMBER_OF_DAYS_IN_ARCHIVE");
+				CircularList<Double> medianList = new CircularList<Double>(bufferSize.intValue());
+				medianList.add((double) bean.getAverageLoad());
 				bufferMap.put(timeSlice, medianList);
 				averageLoadPerPlugPerTimeSlice.put(houseId + "_" + householdId + "_" + plugId,
 						bufferMap);
