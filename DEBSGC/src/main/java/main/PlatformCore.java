@@ -114,6 +114,10 @@ public class PlatformCore {
 				conf.put((String) entry.getKey(), entry.getValue());
 
 			}
+			for (Entry<Object, Object> entry : connectionProperties.entrySet()) {
+				conf.put((String) entry.getKey(), entry.getValue());
+
+			}
 
 			conf.put("dbLoadRate", dbLoadRate);
 			conf.put("NUMBER_OF_DAYS_IN_ARCHIVE", NUMBER_OF_DAYS_IN_ARCHIVE);
