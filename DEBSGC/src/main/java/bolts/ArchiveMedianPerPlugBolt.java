@@ -2,6 +2,8 @@ package bolts;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import org.redisson.Config;
 import org.redisson.Redisson;
@@ -17,6 +19,12 @@ import backtype.storm.tuple.Values;
 import backtype.storm.utils.Utils;
 import beans.HistoryBean;
 
+import com.lmax.disruptor.EventHandler;
+import com.lmax.disruptor.RingBuffer;
+import com.lmax.disruptor.SingleThreadedClaimStrategy;
+import com.lmax.disruptor.SleepingWaitStrategy;
+import com.lmax.disruptor.dsl.Disruptor;
+
 public class ArchiveMedianPerPlugBolt implements IRichBolt {
 	/**
 	 * 
@@ -27,6 +35,11 @@ public class ArchiveMedianPerPlugBolt implements IRichBolt {
 	private Redisson redisson;
 	private Map<String, ConcurrentHashMap<String, CircularList<Double>>> averageLoadPerPlugPerTimeSlice;
 	private Map stormConf;
+	private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool();
+	private transient Disruptor<HistoryBean> disruptor;
+	private static RingBuffer<HistoryBean> ringBuffer;
+	private final static int RING_SIZE = 32768;
+	private static EventHandler<HistoryBean> handler;
 
 	/**
 	 * Initialize with a declaration of the output fields for clarity while
@@ -38,8 +51,9 @@ public class ArchiveMedianPerPlugBolt implements IRichBolt {
 		this.outputFields = outputFields;
 	}
 
+	@SuppressWarnings("unchecked")
 	@Override
-	public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
+	public void prepare(final Map stormConf, TopologyContext context, OutputCollector collector) {
 		_collector = collector;
 		this.stormConf = stormConf;
 		Config config = new Config();
@@ -49,6 +63,13 @@ public class ArchiveMedianPerPlugBolt implements IRichBolt {
 		redisson = Redisson.create(config);
 		averageLoadPerPlugPerTimeSlice = redisson.getMap("query1b");
 
+		disruptor = new Disruptor<HistoryBean>(HistoryBean.EVENT_FACTORY, EXECUTOR,
+				new SingleThreadedClaimStrategy(RING_SIZE), new SleepingWaitStrategy());
+		disruptor.handleEventsWith(handler);
+		ringBuffer = disruptor.start();
+
+		implementLMAXHandler();
+
 	}
 
 	@Override
@@ -57,39 +78,19 @@ public class ArchiveMedianPerPlugBolt implements IRichBolt {
 		HistoryBean bean = (HistoryBean) input.getValue(0);
 		if (bean.getHouseholdId() != -1) {
 			final short houseId = input.getShort(1);
-			final short householdId = input.getShort(2);
-			final short plugId = input.getShort(3);
 			String timeSlice = input.getString(4);
 
 			_collector.emit(new Values(bean, houseId, timeSlice));
+			long sequence = ringBuffer.next();
+			HistoryBean next = ringBuffer.get(sequence);
+			next.setAverageLoad(bean.getAverageLoad());
+			next.setHouseholdId(bean.getHouseholdId());
+			next.setHouseId(houseId);
+			next.setPlugId(bean.getPlugId());
+			next.setReadingsCount(bean.getReadingsCount());
+			next.setTimeSlice(timeSlice);
+			ringBuffer.publish(sequence);
 
-			if (averageLoadPerPlugPerTimeSlice.containsKey(houseId + "_" + householdId + "_"
-					+ plugId)) {
-
-				if (!averageLoadPerPlugPerTimeSlice.get(houseId + "_" + householdId + "_" + plugId)
-						.containsKey(timeSlice)) {
-					Long size = (Long) stormConf.get("NUMBER_OF_DAYS_IN_ARCHIVE");
-					CircularList<Double> medianList = new CircularList<Double>(size.intValue());
-					medianList.add((double) bean.getAverageLoad());
-					averageLoadPerPlugPerTimeSlice.get(houseId + "_" + householdId + "_" + plugId)
-							.put(timeSlice, medianList);
-				} else {
-					CircularList<Double> medianList = averageLoadPerPlugPerTimeSlice.get(
-							houseId + "_" + householdId + "_" + plugId).get(timeSlice);
-					medianList.add((double) bean.getAverageLoad());
-				}
-
-			} else {
-
-				ConcurrentHashMap<String, CircularList<Double>> bufferMap = new ConcurrentHashMap<String, CircularList<Double>>();
-				Long bufferSize = (Long) stormConf.get("NUMBER_OF_DAYS_IN_ARCHIVE");
-				CircularList<Double> medianList = new CircularList<Double>(bufferSize.intValue());
-				medianList.add((double) bean.getAverageLoad());
-				bufferMap.put(timeSlice, medianList);
-				averageLoadPerPlugPerTimeSlice.put(houseId + "_" + householdId + "_" + plugId,
-						bufferMap);
-
-			}
 		} else {
 			Utils.sleep(1000);
 			_collector.emit(new Values(bean, bean.getHouseId(), bean.getTimeSlice()));
@@ -100,8 +101,9 @@ public class ArchiveMedianPerPlugBolt implements IRichBolt {
 
 	@Override
 	public void cleanup() {
-		// TODO Auto-generated method stub
-
+		redisson.flushdb();
+		redisson.shutdown();
+		disruptor.shutdown();
 	}
 
 	@Override
@@ -112,8 +114,50 @@ public class ArchiveMedianPerPlugBolt implements IRichBolt {
 
 	@Override
 	public Map<String, Object> getComponentConfiguration() {
-		// TODO Auto-generated method stub
 		return null;
+	}
+
+	private void implementLMAXHandler() {
+		handler = new EventHandler<HistoryBean>() {
+			public void onEvent(final HistoryBean bean, final long sequence,
+					final boolean endOfBatch) throws Exception {
+				String key = bean.getHouseId() + "_" + bean.getHouseholdId() + "_"
+						+ bean.getPlugId();
+
+				if (averageLoadPerPlugPerTimeSlice.containsKey(key)) {
+
+					if (!averageLoadPerPlugPerTimeSlice.get(key).containsKey(bean.getTimeSlice())) {
+						Long size = (Long) stormConf.get("NUMBER_OF_DAYS_IN_ARCHIVE");
+						CircularList<Double> medianList = new CircularList<Double>(size.intValue());
+						medianList.add((double) bean.getAverageLoad());
+						ConcurrentHashMap<String, CircularList<Double>> buffermap = averageLoadPerPlugPerTimeSlice
+								.get(key);
+						buffermap.put(bean.getTimeSlice(), medianList);
+						averageLoadPerPlugPerTimeSlice.put(key, buffermap);
+					} else {
+						ConcurrentHashMap<String, CircularList<Double>> buffermap = averageLoadPerPlugPerTimeSlice
+								.get(key);
+						CircularList<Double> medianList = buffermap.get(bean.getTimeSlice());
+						medianList.add((double) bean.getAverageLoad());
+						buffermap.put(bean.getTimeSlice(), medianList);
+						averageLoadPerPlugPerTimeSlice.put(key, buffermap);
+
+					}
+
+				} else {
+
+					ConcurrentHashMap<String, CircularList<Double>> bufferMap = new ConcurrentHashMap<String, CircularList<Double>>();
+					Long bufferSize = (Long) stormConf.get("NUMBER_OF_DAYS_IN_ARCHIVE");
+					CircularList<Double> medianList = new CircularList<Double>(
+							bufferSize.intValue());
+					medianList.add((double) bean.getAverageLoad());
+					bufferMap.put(bean.getTimeSlice(), medianList);
+					averageLoadPerPlugPerTimeSlice.put(key, bufferMap);
+				}
+
+			}
+		};
+
 	}
 
 }

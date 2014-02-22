@@ -2,6 +2,8 @@ package beans;
 
 import java.io.Serializable;
 
+import com.lmax.disruptor.EventFactory;
+
 /**
  * The bean representing the historical load aggregates between the time period
  * specified.
@@ -21,6 +23,11 @@ public class HistoryBean implements Serializable {
 	private float averageLoad;
 	private int readingsCount;
 	private String timeSlice;
+	public final static EventFactory<HistoryBean> EVENT_FACTORY = new EventFactory<HistoryBean>() {
+		public HistoryBean newInstance() {
+			return new HistoryBean();
+		}
+	};
 
 	public HistoryBean() {
 	}

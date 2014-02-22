@@ -101,7 +101,8 @@ public class Query1BLiveArchiveJoin implements IRichBolt {
 
 	@Override
 	public void cleanup() {
-		// TODO Auto-generated method stub
+		redisson.flushdb();
+		redisson.shutdown();
 
 	}
 

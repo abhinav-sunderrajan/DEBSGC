@@ -38,7 +38,7 @@ public class StreamProviderQuery1A extends StreamProviderBolt<OutputDF> {
 		Long queryLat = Calendar.getInstance().getTimeInMillis() - input.getLong(4);
 		buffer.add(new OutputDF(houseId, currentLoad, predictedLoad, time, queryLat));
 		count++;
-		if (count % 1000 == 0) {
+		if (count % 5000 == 0) {
 			LOGGER.info("Current load:" + currentLoad + " Predicted load: " + predictedLoad
 					+ " at " + time);
 			LOGGER.info("Query latency is milli secs is " + queryLat);

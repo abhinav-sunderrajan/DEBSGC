@@ -38,8 +38,8 @@ public class ArchiveMedianPerHouseBolt implements IRichBolt {
 	private Long bufferSize;
 
 	public void update(Short houseId, String timeSlice, Double averageLoad) {
-		// LOGGER.info("average for " + houseId + " at " + timeSlice + " is " +
-		// averageLoad);
+		LOGGER.info("average for " + houseId + " at " + timeSlice + " is " + averageLoad);
+
 		if (averageLoadPerHousePerTimeSlice.containsKey(houseId)) {
 			if (!averageLoadPerHousePerTimeSlice.get(houseId).containsKey(timeSlice)) {
 				CircularList<Double> medianList = new CircularList<Double>(bufferSize.intValue());
@@ -50,9 +50,13 @@ public class ArchiveMedianPerHouseBolt implements IRichBolt {
 				averageLoadPerHousePerTimeSlice.put(houseId, bufferMap);
 
 			} else {
-				CircularList<Double> medianList = averageLoadPerHousePerTimeSlice.get(houseId).get(
-						timeSlice);
+				ConcurrentHashMap<String, CircularList<Double>> bufferMap = averageLoadPerHousePerTimeSlice
+						.get(houseId);
+				CircularList<Double> medianList = bufferMap.get(timeSlice);
 				medianList.add(averageLoad);
+				bufferMap.put(timeSlice, medianList);
+				averageLoadPerHousePerTimeSlice.put(houseId, bufferMap);
+
 			}
 		} else {
 
@@ -70,7 +74,7 @@ public class ArchiveMedianPerHouseBolt implements IRichBolt {
 	@Override
 	public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
 		cepConfig = new Configuration();
-		cepConfig.getEngineDefaults().getThreading().setListenerDispatchPreserveOrder(false);
+		cepConfig.getEngineDefaults().getThreading().setListenerDispatchPreserveOrder(true);
 		cep = EPServiceProviderManager.getProvider("ArchiveMedianPerHouseBolt_" + this.hashCode(),
 				cepConfig);
 		cepConfig.addEventType("HistoryBean", HistoryBean.class.getName());
@@ -89,8 +93,8 @@ public class ArchiveMedianPerHouseBolt implements IRichBolt {
 
 		// Redisson will use load balance connections between listed servers
 		config.addAddress(stormConf.get("redis.server") + ":6379");
-		redisson = Redisson.create();
-		averageLoadPerHousePerTimeSlice = redisson.getMap("query1a");
+		redisson = Redisson.create(config);
+		this.averageLoadPerHousePerTimeSlice = redisson.getMap("query1a");
 
 	}
 
@@ -103,7 +107,8 @@ public class ArchiveMedianPerHouseBolt implements IRichBolt {
 
 	@Override
 	public void cleanup() {
-		// TODO Auto-generated method stub
+		redisson.flushdb();
+		redisson.shutdown();
 
 	}
 
