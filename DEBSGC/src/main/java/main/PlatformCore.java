@@ -30,8 +30,11 @@ import beans.SmartPlugBean;
 import bolts.ArchiveMedianPerHouseBolt;
 import bolts.ArchiveMedianPerPlugBolt;
 import bolts.CurrentLoadAvgPerHouseBolt;
+import bolts.CurrentLoadAvgPerPlugBolt;
 import bolts.Query1ALiveArchiveJoin;
+import bolts.Query1BLiveArchiveJoin;
 import bolts.StreamProviderQuery1A;
+import bolts.StreamProviderQuery1B;
 
 /**
  * A singleton instance of the stream processing platform to set up the
@@ -122,6 +125,8 @@ public class PlatformCore {
 			conf.put("dbLoadRate", dbLoadRate);
 			conf.put("NUMBER_OF_DAYS_IN_ARCHIVE", NUMBER_OF_DAYS_IN_ARCHIVE);
 			conf.put("SLICE_IN_MINUTES", SLICE_IN_MINUTES);
+			conf.put("LOAD_PROPERTY", LOAD_PROPERTY);
+			conf.put("WORK_PROPERTY", WORK_PROPERTY);
 
 			// Start monitoring the system CPU, memory parameters
 			// SigarSystemMonitor sysMonitor = SigarSystemMonitor.getInstance(
@@ -156,13 +161,9 @@ public class PlatformCore {
 			// After 24 hours all but one archive thread can be cancelled since
 			// the median values for other time slices are stored in memory.
 
-			ConcurrentLinkedQueue<SmartPlugBean> liveStreamBuffer = new ConcurrentLinkedQueue<SmartPlugBean>();
-
 			LiveStreamSpout<SmartPlugBean> liveStreamLoadSpout = new LiveStreamSpout<SmartPlugBean>(
-					liveStreamBuffer, executor, streamRate, SERVER_PORT,
-					configProperties.getProperty("ingestion.file.dir"),
-					configProperties.getProperty("image.save.directory"), new Fields("livebean",
-							"houseId", "householdId", "plugId"));
+					new ConcurrentLinkedQueue<SmartPlugBean>(), executor, streamRate, SERVER_PORT,
+					new Fields("livebean", "houseId", "householdId", "plugId"));
 
 			core.builder.setSpout("live_stream", liveStreamLoadSpout);
 
@@ -175,7 +176,7 @@ public class PlatformCore {
 			core.builder.setBolt(
 					"CurrentLoadAvgPerHouseBolt",
 					new CurrentLoadAvgPerHouseBolt(SLICE_IN_MINUTES * 60000, new Fields("houseId",
-							"CurrentLoadPerHouseBean")), 5).fieldsGrouping("live_stream",
+							"CurrentLoadPerHouseBean")), 10).fieldsGrouping("live_stream",
 					new Fields("houseId"));
 
 			core.builder.setBolt(
@@ -192,21 +193,24 @@ public class PlatformCore {
 					.globalGrouping("Query1ALiveArchiveJoin");
 
 			// Topology for query 1b
-			// core.builder.setBolt(
-			// "CurrentLoadAvgPerPlugBolt",
-			// new CurrentLoadAvgPerPlugBolt(SLICE_IN_MINUTES * 60000, new
-			// Fields("houseId",
-			// "householdId", "plugId", "CurrentLoadPerPlugBean")),
-			// 5).fieldsGrouping(
-			// "live_stream", new Fields("houseId", "householdId", "plugId"));
-			// core.builder.setBolt(
-			// "Query1BLiveArchiveJoin",
-			// new Query1BLiveArchiveJoin(new Fields("houseId", "householdId",
-			// "plugId",
-			// "currentLoad", "predictedLoad", "predictedTimeString",
-			// "evalTime")), 5)
-			// .fieldsGrouping("CurrentLoadAvgPerPlugBolt",
-			// new Fields("houseId", "householdId", "plugId"));
+			core.builder.setBolt(
+					"CurrentLoadAvgPerPlugBolt",
+					new CurrentLoadAvgPerPlugBolt(SLICE_IN_MINUTES * 60000, new Fields("houseId",
+							"householdId", "plugId", "CurrentLoadPerPlugBean")), 5).fieldsGrouping(
+					"live_stream", new Fields("houseId", "householdId", "plugId"));
+			core.builder.setBolt(
+					"Query1BLiveArchiveJoin",
+					new Query1BLiveArchiveJoin(new Fields("houseId_householdId_plugId",
+							"currentLoad", "predictedLoad", "predictedTimeString", "evalTime")), 5)
+					.fieldsGrouping("CurrentLoadAvgPerPlugBolt",
+							new Fields("houseId", "householdId", "plugId"));
+			core.builder.setBolt(
+					"StreamProviderQuery1B",
+					new StreamProviderQuery1B(
+							configProperties.getProperty("query1b.subscriber.ip"), Integer
+									.parseInt(configProperties
+											.getProperty("query1b.subscriber.port"))), 1)
+					.globalGrouping("Query1BLiveArchiveJoin");
 
 			// Topology for query 2
 			//

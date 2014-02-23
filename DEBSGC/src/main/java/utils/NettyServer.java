@@ -1,9 +1,6 @@
 package utils;
 
-import java.io.FileWriter;
-import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executors;
@@ -28,7 +25,6 @@ import org.jboss.netty.handler.codec.serialization.ObjectDecoder;
 import org.jboss.netty.handler.codec.serialization.ObjectEncoder;
 
 import beans.SmartPlugBean;
-import display.StreamJoinDisplay;
 
 /**
  * 
@@ -40,11 +36,7 @@ public class NettyServer<E> {
 	private ServerBootstrap bootstrap;
 	private Queue<E> buffer;
 	private static ChannelFactory factory;
-	private StreamJoinDisplay display;
-	private Map<Integer, Double> valueMap;
 	private int count;
-	private int streamRate;
-	private FileWriter writeFile;
 	private static final Logger LOGGER = Logger.getLogger(NettyServer.class);
 
 	/**
@@ -55,9 +47,7 @@ public class NettyServer<E> {
 	 * @param writeFileDir
 	 * @param imageSaveDirectory
 	 */
-	@SuppressWarnings("deprecation")
-	public NettyServer(final ConcurrentLinkedQueue<E> buffer, final int streamRate,
-			final String writeFileDir, final String imageSaveDirectory) {
+	public NettyServer(final ConcurrentLinkedQueue<E> buffer, final int streamRate) {
 		try {
 			factory = new NioServerSocketChannelFactory(Executors.newCachedThreadPool(),
 					Executors.newCachedThreadPool(), 32);
@@ -72,7 +62,6 @@ public class NettyServer<E> {
 			bootstrap.setOption("child.tcpNoDelay", true);
 			bootstrap.setOption("child.keepAlive", true);
 			this.buffer = buffer;
-			this.streamRate = streamRate;
 			// display =
 			// StreamJoinDisplay.getInstance("Join Performance Measure",
 			// imageSaveDirectory);
@@ -135,35 +124,5 @@ public class NettyServer<E> {
 			e.getCause().printStackTrace();
 			e.getChannel().close();
 		}
-	}
-
-	private class IngestionMeasure implements Runnable {
-		int numOfMessages = 0;
-
-		@Override
-		public void run() {
-			try {
-				int noOfMsgsin30sec = count - numOfMessages;
-				numOfMessages = count;
-				if (noOfMsgsin30sec == 0) {
-					noOfMsgsin30sec = 1;
-					LOGGER.info("No messages received in the past 30 seconds...");
-					streamRate = 30000000;
-					valueMap.put(3, 0.0);
-					display.refreshDisplayValues(valueMap);
-				} else {
-					streamRate = 30000000 / noOfMsgsin30sec;
-					LOGGER.info("One message every " + 30000000 / noOfMsgsin30sec + " microsecond");
-					valueMap.put(3, noOfMsgsin30sec / 30.0);
-					display.refreshDisplayValues(valueMap);
-					writeFile.append(Double.toString(noOfMsgsin30sec / 30.0));
-					writeFile.append("\n");
-					writeFile.flush();
-				}
-			} catch (IOException e) {
-				LOGGER.error("Error writing to ingestion measure CSV file");
-			}
-		}
-
 	}
 }

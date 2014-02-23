@@ -36,13 +36,11 @@ public class ArchiveStreamSpout<E> extends BaseRichSpout {
 	private ScheduledExecutorService executor;
 	private ConcurrentLinkedQueue<HistoryBean> archiveStreamBufferArr;
 	private Long startTime;
-	private Map conf;
 	private int count = 0;
 
 	@Override
 	public void open(Map conf, TopologyContext context, SpoutOutputCollector collector) {
 		_collector = collector;
-		this.conf = conf;
 		executor = Executors.newScheduledThreadPool(1);
 		ScheduledFuture<?> future = executor.scheduleAtFixedRate(new ArchiveLoader<HistoryBean>(
 				connectionProperties, archiveStreamBufferArr, (long) conf.get("SLICE_IN_MINUTES"),
@@ -61,7 +59,7 @@ public class ArchiveStreamSpout<E> extends BaseRichSpout {
 	public void nextTuple() {
 		while (true) {
 			if (archiveStreamBufferArr.isEmpty()) {
-				Utils.sleep(500);
+				Utils.sleep(1);
 				return;
 			}
 
@@ -71,10 +69,6 @@ public class ArchiveStreamSpout<E> extends BaseRichSpout {
 				_collector.emit(new Values(historyBean, historyBean.getHouseId(), historyBean
 						.getHouseholdId(), historyBean.getPlugId(), historyBean.getTimeSlice()));
 				count++;
-				if (count % 1000 == 0) {
-					System.out.println(historyBean.getHouseholdId() + historyBean.getPlugId() + " "
-							+ historyBean.getTimeSlice());
-				}
 			}
 		}
 

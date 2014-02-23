@@ -16,7 +16,6 @@ import backtype.storm.topology.OutputFieldsDeclarer;
 import backtype.storm.tuple.Fields;
 import backtype.storm.tuple.Tuple;
 import backtype.storm.tuple.Values;
-import backtype.storm.utils.Utils;
 import beans.HistoryBean;
 
 import com.lmax.disruptor.EventHandler;
@@ -63,39 +62,31 @@ public class ArchiveMedianPerPlugBolt implements IRichBolt {
 		redisson = Redisson.create(config);
 		averageLoadPerPlugPerTimeSlice = redisson.getMap("query1b");
 
+		// Initialize the handler first
+		implementLMAXHandler();
 		disruptor = new Disruptor<HistoryBean>(HistoryBean.EVENT_FACTORY, EXECUTOR,
 				new SingleThreadedClaimStrategy(RING_SIZE), new SleepingWaitStrategy());
 		disruptor.handleEventsWith(handler);
 		ringBuffer = disruptor.start();
 
-		implementLMAXHandler();
-
 	}
 
 	@Override
 	public void execute(Tuple input) {
-
 		HistoryBean bean = (HistoryBean) input.getValue(0);
-		if (bean.getHouseholdId() != -1) {
-			final short houseId = input.getShort(1);
-			String timeSlice = input.getString(4);
-
-			_collector.emit(new Values(bean, houseId, timeSlice));
-			long sequence = ringBuffer.next();
-			HistoryBean next = ringBuffer.get(sequence);
-			next.setAverageLoad(bean.getAverageLoad());
-			next.setHouseholdId(bean.getHouseholdId());
-			next.setHouseId(houseId);
-			next.setPlugId(bean.getPlugId());
-			next.setReadingsCount(bean.getReadingsCount());
-			next.setTimeSlice(timeSlice);
-			ringBuffer.publish(sequence);
-
-		} else {
-			Utils.sleep(1000);
-			_collector.emit(new Values(bean, bean.getHouseId(), bean.getTimeSlice()));
-
-		}
+		final short houseId = input.getShort(1);
+		String timeSlice = input.getString(4);
+		long sequence = ringBuffer.next();
+		HistoryBean next = ringBuffer.get(sequence);
+		next.setAverageLoad(bean.getAverageLoad());
+		next.setHouseholdId(bean.getHouseholdId());
+		next.setHouseId(houseId);
+		next.setPlugId(bean.getPlugId());
+		next.setReadingsCount(bean.getReadingsCount());
+		next.setTimeSlice(timeSlice);
+		ringBuffer.publish(sequence);
+		ringBuffer.publish(sequence);
+		_collector.emit(new Values(bean, houseId, timeSlice));
 
 	}
 

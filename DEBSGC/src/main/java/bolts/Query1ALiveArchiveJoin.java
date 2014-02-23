@@ -84,9 +84,9 @@ public class Query1ALiveArchiveJoin implements IRichBolt {
 		}
 
 		count++;
-		if (count % 1000 == 0) {
-			LOGGER.info(key + " " + values);
-		}
+		// if (count % 1000 == 0) {
+		// LOGGER.info(key + " " + values);
+		// }
 
 	}
 

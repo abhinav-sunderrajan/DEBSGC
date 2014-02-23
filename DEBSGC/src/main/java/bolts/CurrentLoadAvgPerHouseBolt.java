@@ -3,8 +3,6 @@ package bolts;
 import java.text.ParseException;
 import java.util.Map;
 
-import main.PlatformCore;
-
 import org.apache.log4j.Logger;
 
 import backtype.storm.task.OutputCollector;
@@ -78,11 +76,13 @@ public class CurrentLoadAvgPerHouseBolt implements IRichBolt {
 				+ (Long.parseLong((String) stormConf.get("live.start.time")) + avgCalcInterval - 1000));
 		cepAdm.createEPL("on beans.SmartPlugBean(timestamp > UL) set LL=(LL+" + avgCalcInterval
 				+ "), UL=(UL+" + avgCalcInterval + ") ");
-		EPStatement cepStatement = cepAdm
-				.createEPL("select houseId,AVG(value) as avgVal,timestamp,current_timestamp FROM "
-						+ "beans.SmartPlugBean(property=" + PlatformCore.LOAD_PROPERTY
-						+ ").std:groupwin(houseId).win:keepall()"
-						+ ".win:expr(timestamp >=LL AND timestamp<UL) group by houseId");
+
+		String epl = "select houseId,AVG(value) as avgVal,timestamp,current_timestamp FROM "
+				+ "beans.SmartPlugBean(property=" + stormConf.get("LOAD_PROPERTY")
+				+ ").std:groupwin(houseId).win:keepall()"
+				+ ".win:expr(timestamp >=LL AND timestamp<UL) group by houseId";
+		System.out.println(epl);
+		EPStatement cepStatement = cepAdm.createEPL(epl);
 		cepStatement.setSubscriber(this);
 	}
 

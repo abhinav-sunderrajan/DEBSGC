@@ -3,7 +3,6 @@ package bolts;
 import java.text.ParseException;
 import java.util.Map;
 
-import main.PlatformCore;
 import backtype.storm.task.OutputCollector;
 import backtype.storm.task.TopologyContext;
 import backtype.storm.topology.IRichBolt;
@@ -82,7 +81,7 @@ public class CurrentLoadAvgPerPlugBolt implements IRichBolt {
 				.createEPL("select houseId,householdId,plugId, AVG(value) as "
 						+ "avgVal,timestamp,current_timestamp FROM "
 						+ "beans.SmartPlugBean(property="
-						+ PlatformCore.LOAD_PROPERTY
+						+ stormConf.get("LOAD_PROPERTY")
 						+ ").std:groupwin(houseId,householdId,plugId).win:keepall()"
 						+ ".win:expr(timestamp >=LL AND timestamp<UL) group by houseId,householdId,plugId");
 		cepStatement.setSubscriber(this);

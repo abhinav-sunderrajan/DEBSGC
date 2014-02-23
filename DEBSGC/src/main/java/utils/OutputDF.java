@@ -10,6 +10,10 @@ import com.lmax.disruptor.EventFactory;
  */
 public class OutputDF extends ArrayList<Object> {
 
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 1L;
 	public final static EventFactory<OutputDF> EVENT_FACTORY = new EventFactory<OutputDF>() {
 		public OutputDF newInstance() {
 			return new OutputDF();
@@ -22,6 +26,12 @@ public class OutputDF extends ArrayList<Object> {
 
 	public OutputDF(Object... vals) {
 		super(vals.length);
+		for (Object o : vals) {
+			add(o);
+		}
+	}
+
+	public void add(Object... vals) {
 		for (Object o : vals) {
 			add(o);
 		}

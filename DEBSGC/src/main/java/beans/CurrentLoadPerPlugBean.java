@@ -15,6 +15,16 @@ public class CurrentLoadPerPlugBean implements Serializable {
 	private Long currTime;
 	private Long evaluationTime;
 
+	/**
+	 * Initialize with fields
+	 * 
+	 * @param houseId
+	 * @param houseHoldId
+	 * @param plugId
+	 * @param currentAverageLoad
+	 * @param currTime
+	 * @param evaluationTime
+	 */
 	public CurrentLoadPerPlugBean(short houseId, short houseHoldId, short plugId,
 			double currentAverageLoad, Long currTime, Long evaluationTime) {
 		this.houseId = houseId;

@@ -41,6 +41,7 @@ public class LiveStreamSpout<E> extends BaseRichSpout {
 	private int port;
 	private transient Redisson redisson;
 	private transient RTopic<Integer> monitor;
+	private static long count = 0;
 
 	/**
 	 * 
@@ -50,20 +51,16 @@ public class LiveStreamSpout<E> extends BaseRichSpout {
 	 * @param streamRate
 	 * @param df
 	 * @param port
-	 * @param writeFileDir
-	 * @param imageSaveDirectory
 	 * @param property
 	 * @param outFields
 	 */
 	public LiveStreamSpout(final ConcurrentLinkedQueue<E> buffer,
 			final ScheduledExecutorService executor, final int streamRate, final int port,
-			final String writeFileDir, final String imageSaveDirectory, final Fields outFields) {
+			final Fields outFields) {
 		this.buffer = buffer;
 		this.outFields = outFields;
 		this.streamRate = streamRate;
-		this.writeFileDir = writeFileDir;
 		this.port = port;
-		this.imageSaveDirectory = imageSaveDirectory;
 	}
 
 	@Override
@@ -71,8 +68,7 @@ public class LiveStreamSpout<E> extends BaseRichSpout {
 		_collector = collector;
 
 		// Fire up the netty server to listen to streams at the given port.
-		NettyServer<E> server = new NettyServer<E>(buffer, streamRate, writeFileDir,
-				imageSaveDirectory);
+		NettyServer<E> server = new NettyServer<E>(buffer, streamRate);
 		server.listen(port);
 		org.redisson.Config redissonConfig = new org.redisson.Config();
 		redissonConfig.addAddress(conf.get("redis.server") + ":6379");
@@ -88,8 +84,14 @@ public class LiveStreamSpout<E> extends BaseRichSpout {
 			if (buffer.isEmpty()) {
 				return;
 			}
-			synchronized (this.monitor) {
-				monitor.publish(111);
+
+			count++;
+			if (count == 1) {
+				// Send the communication to Archive streams just the first time
+				synchronized (this.monitor) {
+					monitor.publish(111);
+				}
+
 			}
 			E obj = buffer.poll();
 			if (obj instanceof SmartPlugBean) {

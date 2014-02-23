@@ -8,7 +8,7 @@ import utils.OutputDF;
 import backtype.storm.topology.OutputFieldsDeclarer;
 import backtype.storm.tuple.Tuple;
 
-public class StreamProviderQuery2 extends StreamProviderBolt<OutputDF> {
+public class StreamProviderQuery2 extends StreamProviderBolt {
 	private long count = 0;
 	private static final Logger LOGGER = Logger.getLogger(StreamProviderQuery2.class);
 
@@ -27,7 +27,11 @@ public class StreamProviderQuery2 extends StreamProviderBolt<OutputDF> {
 		Double percentage = input.getDouble(2);
 		Integer houseId = input.getInteger(1);
 		String time = input.getString(0);
-		buffer.add(new OutputDF(queryLat, percentage, houseId, time));
+		long sequence = ringBuffer.next();
+		OutputDF df = ringBuffer.get(sequence);
+		df.clear();
+		df.add(queryLat, percentage, houseId, time);
+		ringBuffer.publish(sequence);
 		count++;
 		if (count % 1000 == 0) {
 			LOGGER.info("% of plugs above global median for houseId " + houseId + " at " + time

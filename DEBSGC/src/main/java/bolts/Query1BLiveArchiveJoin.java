@@ -57,17 +57,16 @@ public class Query1BLiveArchiveJoin implements IRichBolt {
 	@Override
 	public void execute(Tuple input) {
 		CurrentLoadPerPlugBean currentLoad = (CurrentLoadPerPlugBean) input.getValue(3);
+		Long sliceInMin = (Long) stormConf.get("SLICE_IN_MINUTES");
 		short houseId = currentLoad.getHouseId();
 		short householdId = currentLoad.getHouseHoldId();
 		short plugId = currentLoad.getPlugId();
 
-		cal.setTimeInMillis(currentLoad.getCurrTime() + 2
-				* (Integer) stormConf.get("SLICE_IN_MINUTES") * 60 * 1000);
+		cal.setTimeInMillis(currentLoad.getCurrTime() + 2 * sliceInMin * 60 * 1000);
 		int hrs = cal.get(Calendar.HOUR);
 		int mnts = cal.get(Calendar.MINUTE);
 		String predTimeStart = String.format("%02d:%02d", hrs, mnts);
-		cal.setTimeInMillis(currentLoad.getCurrTime() + 3
-				* (Integer) stormConf.get("SLICE_IN_MINUTES") * 60 * 1000);
+		cal.setTimeInMillis(currentLoad.getCurrTime() + 3 * sliceInMin * 60 * 1000);
 		hrs = cal.get(Calendar.HOUR);
 		mnts = cal.get(Calendar.MINUTE);
 		String predTimeEnd = String.format("%02d:%02d", hrs, mnts);
@@ -80,7 +79,7 @@ public class Query1BLiveArchiveJoin implements IRichBolt {
 		if (values != null) {
 
 			for (Object obj : values) {
-				stats.addValue((Float) obj);
+				stats.addValue((Double) obj);
 			}
 
 			double predictedLoad = (stats.getPercentile(50) + currentLoad.getCurrentAverageLoad()) / 2.0;
@@ -90,8 +89,8 @@ public class Query1BLiveArchiveJoin implements IRichBolt {
 			count++;
 
 			// Not sure how to visualize this hence logging the predicted load
-			// for every 200 tuples processed.
-			if (count % 200 == 0) {
+			// for every 1000 tuples processed.
+			if (count % 1000 == 0) {
 				LOGGER.info("Predicted load at " + houseId + "_" + householdId + "_" + plugId
 						+ " is " + predictedLoad + " for time " + key);
 			}

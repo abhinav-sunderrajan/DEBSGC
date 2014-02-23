@@ -107,16 +107,16 @@ public class ArchiveLoader<T> implements Runnable {
 			count++;
 			if (count == 1) {
 				LOGGER.info("Wait for live streams before further database loading");
-				final List<Integer> stupid = new ArrayList<>();
+				final List<Integer> wait = new ArrayList<>();
 
 				monitor.addListener(new MessageListener<Integer>() {
 
 					public void onMessage(Integer message) {
-						stupid.add(1);
+						wait.add(1);
 					}
 				});
 
-				while (stupid.size() == 0) {
+				while (wait.size() == 0) {
 					// very bad implementation but do not how else
 					Thread.sleep(500);
 				}
