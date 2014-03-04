@@ -37,8 +37,10 @@ public class ArchiveMedianPerHouseBolt implements IRichBolt {
 	private static final Logger LOGGER = Logger.getLogger(ArchiveMedianPerHouseBolt.class);
 	private Long bufferSize;
 
-	public void update(Short houseId, String timeSlice, Double averageLoad) {
-		LOGGER.info("average for " + houseId + " at " + timeSlice + " is " + averageLoad);
+	public void update(Short houseId, String timeSlice, Integer dayCount, Double averageLoad) {
+		// LOGGER.info("average for " + houseId + " at day:" + dayCount +
+		// " and time:" + timeSlice
+		// + " is " + averageLoad);
 
 		if (averageLoadPerHousePerTimeSlice.containsKey(houseId)) {
 			if (!averageLoadPerHousePerTimeSlice.get(houseId).containsKey(timeSlice)) {
@@ -84,9 +86,10 @@ public class ArchiveMedianPerHouseBolt implements IRichBolt {
 
 		EPStatement cepStatement = cepAdm.createEPL("@Hint('reclaim_group_aged="
 				+ stormConf.get("dbLoadRate") + "')"
-				+ "SELECT houseId,timeSlice,average FROM beans.HistoryBean"
-				+ ".std:groupwin(houseId,timeSlice).win:expr_batch(averageLoad<0.0,false)"
-				+ ".stat:weighted_avg(averageLoad,readingsCount) " + "group by houseId,timeSlice");
+				+ "SELECT houseId,timeSlice,dayCount,average FROM beans.HistoryBean"
+				+ ".std:groupwin(houseId,timeSlice,dayCount).win:expr_batch(averageLoad<0.0,false)"
+				+ ".stat:weighted_avg(averageLoad,readingsCount) "
+				+ "group by houseId,timeSlice,dayCount");
 		cepStatement.setSubscriber(this);
 
 		Config config = new Config();

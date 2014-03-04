@@ -31,6 +31,7 @@ import bolts.ArchiveMedianPerHouseBolt;
 import bolts.ArchiveMedianPerPlugBolt;
 import bolts.CurrentLoadAvgPerHouseBolt;
 import bolts.CurrentLoadAvgPerPlugBolt;
+import bolts.DatabaseInsertorBolt;
 import bolts.Query1ALiveArchiveJoin;
 import bolts.Query1BLiveArchiveJoin;
 import bolts.StreamProviderQuery1A;
@@ -57,10 +58,10 @@ public class PlatformCore {
 	public static ScheduledExecutorService executor = Executors.newScheduledThreadPool(2);
 	private static Properties connectionProperties;
 	private static Properties configProperties;
-	private static final Integer SLICE_IN_MINUTES = 1;
+	private static Integer sliceInMin;
 	public static final Integer WORK_PROPERTY = 0;
 	public static final Integer LOAD_PROPERTY = 1;
-	private static final Integer NUMBER_OF_ARCHIVE_STREAMS = 1;
+	private static Integer numberOfArchiveStreams;
 	private static final Integer NUMBER_OF_DAYS_IN_ARCHIVE = 29;
 	private static final Logger LOGGER = Logger.getLogger(PlatformCore.class);
 	public static final DateFormat df = new SimpleDateFormat("dd-MMM-yyyy HH:mm:ss");
@@ -74,14 +75,18 @@ public class PlatformCore {
 		redisson = Redisson.create(redissonConfig);
 		redisson.flushdb();
 
+		sliceInMin = Integer.parseInt(configProperties.getProperty("slice.in.mins"));
+		numberOfArchiveStreams = Integer.parseInt(configProperties
+				.getProperty("number.of.archive.streams"));
+
 		streamRate = Integer
 				.parseInt(configProperties.getProperty("live.stream.rate.in.microsecs"));
-		dbLoadRate = (int) (1000 * 60 * SLICE_IN_MINUTES * streamRate / 1000000);
+		dbLoadRate = (int) (1200 * 60 * sliceInMin * streamRate / 1000000);
 		LOGGER.info("Database load rate in seconds is " + dbLoadRate);
 		builder = new TopologyBuilder();
 		liveStartTime = Long.parseLong((PlatformCore.configProperties
 				.getProperty("live.start.time")));
-		archiveStartTime = liveStartTime - (24 * 3600 * 1000) + (SLICE_IN_MINUTES * 2 * 60 * 1000);
+		archiveStartTime = liveStartTime - (24 * 3600 * 1000) + (sliceInMin * 2 * 60 * 1000);
 
 	}
 
@@ -111,7 +116,7 @@ public class PlatformCore {
 			core = new PlatformCore();
 
 			Config conf = new Config();
-			conf.setNumWorkers(5);
+			conf.setNumWorkers(Integer.parseInt(configProperties.getProperty("num.of.workers")));
 			conf.setDebug(false);
 			for (Entry<Object, Object> entry : configProperties.entrySet()) {
 				conf.put((String) entry.getKey(), entry.getValue());
@@ -123,40 +128,33 @@ public class PlatformCore {
 			}
 
 			conf.put("dbLoadRate", dbLoadRate);
+			conf.put("SLICE_IN_MINUTES", sliceInMin);
 			conf.put("NUMBER_OF_DAYS_IN_ARCHIVE", NUMBER_OF_DAYS_IN_ARCHIVE);
-			conf.put("SLICE_IN_MINUTES", SLICE_IN_MINUTES);
 			conf.put("LOAD_PROPERTY", LOAD_PROPERTY);
 			conf.put("WORK_PROPERTY", WORK_PROPERTY);
-
-			// Start monitoring the system CPU, memory parameters
-			// SigarSystemMonitor sysMonitor = SigarSystemMonitor.getInstance(
-			// configProperties.getProperty("memory.file.dir"), streamRate,
-			// configProperties.getProperty("image.save.directory"));
-			// sysMonitor.setCpuUsageScalefactor((Double.parseDouble(configProperties
-			// .getProperty("cpu.usage.scale.factor"))));
-			// executor.scheduleAtFixedRate(sysMonitor, 0, 30,
-			// TimeUnit.SECONDS);
+			conf.put("NUMBER_OF_ARCHIVE_STREAMS", numberOfArchiveStreams);
 
 			// Bolt for computing the median from the archive streams
 			long archiveloadStart = archiveStartTime;
-			BoltDeclarer declarer = core.builder
-					.setBolt("ArchiveMedianPerPlugBolt", new ArchiveMedianPerPlugBolt(new Fields(
-							"HistoryBean", "houseid", "timeSlice")), 5);
+			BoltDeclarer declarer = core.builder.setBolt("ArchiveMedianPerPlugBolt",
+					new ArchiveMedianPerPlugBolt(new Fields("HistoryBean", "houseid", "timeSlice",
+							"dayCount")), 5);
 
-			for (int count = 0; count < NUMBER_OF_ARCHIVE_STREAMS; count++) {
+			for (int count = 0; count < numberOfArchiveStreams; count++) {
 
 				ArchiveStreamSpout<HistoryBean> archiveStreamSpout = new ArchiveStreamSpout<HistoryBean>(
 						new ConcurrentLinkedQueue<HistoryBean>(), connectionProperties,
-						archiveloadStart);
+						archiveloadStart, count + 1);
 				core.builder.setSpout("archive_stream_" + count, archiveStreamSpout);
 				declarer.fieldsGrouping("archive_stream_" + count, new Fields("houseId",
 						"householdId", "plugId", "timeSlice"));
-				archiveloadStart = archiveloadStart + 24 * 3600 * 1000;
+				archiveloadStart = archiveloadStart - 24 * 3600 * 1000;
 
 			}
 
 			core.builder.setBolt("ArchiveMedianPerHouseBolt", new ArchiveMedianPerHouseBolt(), 5)
-					.fieldsGrouping("ArchiveMedianPerPlugBolt", new Fields("houseid", "timeSlice"));
+					.fieldsGrouping("ArchiveMedianPerPlugBolt",
+							new Fields("houseid", "timeSlice", "dayCount"));
 
 			// After 24 hours all but one archive thread can be cancelled since
 			// the median values for other time slices are stored in memory.
@@ -167,22 +165,21 @@ public class PlatformCore {
 
 			core.builder.setSpout("live_stream", liveStreamLoadSpout);
 
-			// // Save the Live streams to the database as and when it comes.
-			// core.builder.setBolt("save_to_archive", new
-			// DatabaseInsertorBolt(connectionProperties),
-			// 5).shuffleGrouping("live_stream");
+			// Save the Live streams to the database as and when it comes.
+			core.builder.setBolt("DatabaseInsertorBolt", new DatabaseInsertorBolt(), 10)
+					.shuffleGrouping("live_stream");
 
 			// Topology for query 1a
 			core.builder.setBolt(
 					"CurrentLoadAvgPerHouseBolt",
-					new CurrentLoadAvgPerHouseBolt(SLICE_IN_MINUTES * 60000, new Fields("houseId",
+					new CurrentLoadAvgPerHouseBolt(sliceInMin * 60000, new Fields("houseId",
 							"CurrentLoadPerHouseBean")), 10).fieldsGrouping("live_stream",
 					new Fields("houseId"));
 
 			core.builder.setBolt(
 					"Query1ALiveArchiveJoin",
 					new Query1ALiveArchiveJoin(new Fields("houseId", "currentLoad",
-							"predictedLoad", "predictedTimeString", "evalTime")), 5)
+							"predictedLoad", "predictedTimeString", "evalTime")), 10)
 					.fieldsGrouping("CurrentLoadAvgPerHouseBolt", new Fields("houseId"));
 			core.builder.setBolt(
 					"StreamProviderQuery1A",
@@ -195,14 +192,15 @@ public class PlatformCore {
 			// Topology for query 1b
 			core.builder.setBolt(
 					"CurrentLoadAvgPerPlugBolt",
-					new CurrentLoadAvgPerPlugBolt(SLICE_IN_MINUTES * 60000, new Fields("houseId",
+					new CurrentLoadAvgPerPlugBolt(sliceInMin * 60000, new Fields("houseId",
 							"householdId", "plugId", "CurrentLoadPerPlugBean")), 5).fieldsGrouping(
 					"live_stream", new Fields("houseId", "householdId", "plugId"));
-			core.builder.setBolt(
-					"Query1BLiveArchiveJoin",
-					new Query1BLiveArchiveJoin(new Fields("houseId_householdId_plugId",
-							"currentLoad", "predictedLoad", "predictedTimeString", "evalTime")), 5)
-					.fieldsGrouping("CurrentLoadAvgPerPlugBolt",
+			core.builder
+					.setBolt(
+							"Query1BLiveArchiveJoin",
+							new Query1BLiveArchiveJoin(new Fields("houseId_householdId_plugId",
+									"currentLoad", "predictedLoad", "predictedTimeString",
+									"evalTime")), 10).fieldsGrouping("CurrentLoadAvgPerPlugBolt",
 							new Fields("houseId", "householdId", "plugId"));
 			core.builder.setBolt(
 					"StreamProviderQuery1B",
@@ -213,28 +211,28 @@ public class PlatformCore {
 					.globalGrouping("Query1BLiveArchiveJoin");
 
 			// Topology for query 2
-			//
+
 			// String[] medianBoltEvents = { SmartPlugBean.class.getName() };
 			//
 			// // Emits the median load for all plugs over window of the
 			// // specified size
 			// core.builder.setBolt(
-			// "GlobalMedianLoadBolt",
-			// new GlobalMedianLoadBolt(medianBoltEvents, ProjectUtils
-			// .getGlobalMedianLoadPerHour(), "GlobalMedianLoadBolt", new
-			// Fields(
-			// "livebean", "houseId", "householdId", "plugId")),
-			// 1).globalGrouping(
-			// "live_stream");
+			// "GlobalMedianLoadPerHourBolt",
+			// new GlobalMedianLoadPerHourBolt(medianBoltEvents, ProjectUtils
+			// .getGlobalMedianLoadPerHourQuery(),
+			// "GlobalMedianLoadPerHourBolt",
+			// new Fields("livebean", "houseId", "householdId", "plugId")), 1)
+			// .globalGrouping("live_stream");
 			//
 			// // Calculates the median load per plug
 			// core.builder.setBolt(
-			// "PerPlugMedianBolt",
-			// new PerPlugMedianBolt(new Fields("medianLoad", "globalMedian",
+			// "MedianLoadPerPlugPerHourBolt",
+			// new MedianLoadPerPlugPerHourBolt(new Fields("medianLoad",
+			// "globalMedian",
 			// "timestampStart", "timestampEnd", "queryEvalTime", "houseId",
-			// "percentage", "latency")),
-			// 5).fieldsGrouping("GlobalMedianLoadBolt",
-			// new Fields("houseId", "householdId", "plugId"));
+			// "percentage", "latency")), 5).fieldsGrouping(
+			// "GlobalMedianLoadPerHourBolt", new Fields("houseId",
+			// "householdId", "plugId"));
 			//
 			// // Compares the median load of the plug with the global median
 			// // before estimating the outliers per house.
@@ -252,8 +250,8 @@ public class PlatformCore {
 			// new StreamProviderQuery2(configProperties
 			// .getProperty("query2.subscriber.ip"), Integer
 			// .parseInt(configProperties
-			// .getProperty("query2.subscriber.port"))))
-			// .globalGrouping("Query2AOutlierEstimator");
+			// .getProperty("query2.subscriber.port"))), 2)
+			// .shuffleGrouping("Query2AOutlierEstimator");
 
 			if (isLocal) {
 				LocalCluster cluster = new LocalCluster();
@@ -263,12 +261,11 @@ public class PlatformCore {
 				conf.put(Config.NIMBUS_CHILDOPTS, "-Xmx2048m -Xms2048m  "
 						+ "-Xloggc:logs/gc1k2.log -XX:+PrintGCDetails -XX:+UseParallelOldGC "
 						+ "-XX:GCTimeRatio=4 -XX:NewRatio=2");
+				conf.put(Config.SUPERVISOR_CHILDOPTS, "-Xmx2048m -Xms2048m  "
+						+ "-Xloggc:logs/gc1k2.log -XX:+PrintGCDetails -XX:+UseParallelOldGC "
+						+ "-XX:GCTimeRatio=4 -XX:NewRatio=2");
 				StormSubmitter.submitTopology(topologyName, conf, core.builder.createTopology());
 			}
-
-			// Utils.sleep(100000);
-			// cluster.killTopology("test");
-			// cluster.shutdown();
 
 		} catch (FileNotFoundException e) {
 			LOGGER.error("Unable to find the config/connection properties files", e);

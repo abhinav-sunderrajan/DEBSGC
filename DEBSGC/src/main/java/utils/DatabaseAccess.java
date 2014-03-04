@@ -24,7 +24,7 @@ public class DatabaseAccess {
 	 * @param connectionProperties
 	 * @return
 	 */
-	public void openDBConnection(final Properties connectionProperties) {
+	public Connection openDBConnection(final Properties connectionProperties) {
 
 		String url = connectionProperties.getProperty("database.url");
 		String dbName = connectionProperties.getProperty("database.name");
@@ -38,6 +38,7 @@ public class DatabaseAccess {
 		} catch (Exception e) {
 			LOGGER.error("Unable to connect to database. Please check the settings", e);
 		}
+		return connect;
 
 	}
 
@@ -49,15 +50,16 @@ public class DatabaseAccess {
 	 * @param userName
 	 * @param password
 	 */
-	public void openDBConnection(String url, String userName, String password) {
+	public Connection openDBConnection(String url, String db, String userName, String password) {
 		try {
 			Class.forName(DRIVER).newInstance();
 
-			connect = (Connection) DriverManager.getConnection(url, userName, password);
+			connect = (Connection) DriverManager.getConnection(url + db, userName, password);
 
 		} catch (Exception e) {
 			LOGGER.error("Unable to connect to database. Please check the settings", e);
 		}
+		return connect;
 
 	}
 

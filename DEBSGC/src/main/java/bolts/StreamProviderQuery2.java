@@ -1,5 +1,6 @@
 package bolts;
 
+import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.log4j.Logger;
@@ -31,13 +32,19 @@ public class StreamProviderQuery2 extends StreamProviderBolt {
 		OutputDF df = ringBuffer.get(sequence);
 		df.clear();
 		df.add(queryLat, percentage, houseId, time);
-		ringBuffer.publish(sequence);
 		count++;
 		if (count % 1000 == 0) {
 			LOGGER.info("% of plugs above global median for houseId " + houseId + " at " + time
 					+ " is " + percentage);
 			LOGGER.info("Query latency is milli secs is " + queryLat);
+			double totalMem = runtime.totalMemory();
+			double freemem = runtime.freeMemory();
+			Map<String, Double> map = new HashMap<String, Double>();
+			map.put(localhost, (freemem * 100) / totalMem);
+			LOGGER.info("free mem at " + localhost + " is " + freemem);
+			df.add(map);
 		}
+		ringBuffer.publish(sequence);
 
 	}
 

@@ -1,5 +1,7 @@
 package bolts;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -7,17 +9,19 @@ import java.util.concurrent.Executors;
 import org.apache.log4j.Logger;
 
 import utils.OutputDF;
-import utils.VisualizationServerConnect;
 import backtype.storm.task.OutputCollector;
 import backtype.storm.task.TopologyContext;
 import backtype.storm.topology.IRichBolt;
 
-import com.lmax.disruptor.EventHandler;
 import com.lmax.disruptor.RingBuffer;
-import com.lmax.disruptor.SingleThreadedClaimStrategy;
-import com.lmax.disruptor.SleepingWaitStrategy;
-import com.lmax.disruptor.dsl.Disruptor;
 
+/**
+ * Abstract class is the interface between the data-stream processing platform
+ * and the outside world through a Netty socket which connects to a server.
+ * 
+ * @author abhinav
+ * 
+ */
 public abstract class StreamProviderBolt implements IRichBolt {
 
 	/**
@@ -29,8 +33,17 @@ public abstract class StreamProviderBolt implements IRichBolt {
 	protected static final ExecutorService EXECUTOR = Executors.newCachedThreadPool();
 	protected static RingBuffer<OutputDF> ringBuffer;
 	protected final static int RING_SIZE = 262144;
+	protected String localhost;
+	protected transient Runtime runtime;
 	private static final Logger LOGGER = Logger.getLogger(StreamProviderBolt.class);
 
+	/**
+	 * Initialize with the server host and port to which to send the processed
+	 * streams to.
+	 * 
+	 * @param serverIP
+	 * @param serverPort
+	 */
 	public StreamProviderBolt(String serverIP, int serverPort) {
 		this.serverIP = serverIP;
 		this.serverPort = serverPort;
@@ -40,19 +53,25 @@ public abstract class StreamProviderBolt implements IRichBolt {
 	@Override
 	public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
 		try {
-			VisualizationServerConnect<OutputDF> send = new VisualizationServerConnect<OutputDF>(
-					serverIP);
-			EventHandler<OutputDF> handler = send.connectToNettyServer(serverPort);
+			// VisualizationServerConnect<OutputDF> send = new
+			// VisualizationServerConnect<OutputDF>(
+			// serverIP);
+			// EventHandler<OutputDF> handler =
+			// send.connectToNettyServer(serverPort);
+			//
+			// Disruptor<OutputDF> disruptor = new
+			// Disruptor<OutputDF>(OutputDF.EVENT_FACTORY,
+			// EXECUTOR, new SingleThreadedClaimStrategy(RING_SIZE),
+			// new SleepingWaitStrategy());
+			// disruptor.handleEventsWith(handler);
+			// ringBuffer = disruptor.start();
+			localhost = InetAddress.getLocalHost().getHostName();
+			runtime = Runtime.getRuntime();
+			LOGGER.info("TOTAL MEMORY:" + (runtime.totalMemory() / (1024 * 1024)) + "MB");
 
-			Disruptor<OutputDF> disruptor = new Disruptor<OutputDF>(OutputDF.EVENT_FACTORY,
-					EXECUTOR, new SingleThreadedClaimStrategy(RING_SIZE),
-					new SleepingWaitStrategy());
-			disruptor.handleEventsWith(handler);
-			ringBuffer = disruptor.start();
-		} catch (InterruptedException e) {
-			LOGGER.error("Error connecting to stream subscriber", e);
+		} catch (UnknownHostException e) {
+			LOGGER.error("Error detrmining local-host address");
 		}
 
 	}
-
 }

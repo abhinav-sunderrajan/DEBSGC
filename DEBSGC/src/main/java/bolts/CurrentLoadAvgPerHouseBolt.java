@@ -35,7 +35,7 @@ public class CurrentLoadAvgPerHouseBolt implements IRichBolt {
 	private OutputCollector _collector;
 	private long avgCalcInterval;
 	private Fields outFields;
-	private int count = 0;
+	private long emitCount = 0;
 	private static final Logger LOGGER = Logger.getLogger(CurrentLoadAvgPerHouseBolt.class);
 
 	/**
@@ -51,12 +51,14 @@ public class CurrentLoadAvgPerHouseBolt implements IRichBolt {
 		this.outFields = outFields;
 	}
 
-	public void update(Integer houseId, Double averageLoad, Long timestamp, Long evaluationTime) {
+	public void update(Long count, Integer houseId, Double averageLoad, Long timestamp,
+			Long evaluationTime) {
 		_collector.emit(new Values(houseId, new CurrentLoadPerHouseBean(houseId.shortValue(),
 				averageLoad, timestamp, evaluationTime)));
-		count++;
-		// if (count % 1000 == 0) {
-		// LOGGER.info(houseId + " " + new Timestamp(timestamp));
+		// emitCount++;
+		// if (emitCount % 10000 == 0) {
+		// LOGGER.info("Number of records in house" + houseId + " window:" +
+		// count);
 		// }
 	}
 
@@ -73,15 +75,15 @@ public class CurrentLoadAvgPerHouseBolt implements IRichBolt {
 		cepAdm.createEPL("create variable long LL = "
 				+ Long.parseLong((String) stormConf.get("live.start.time")));
 		cepAdm.createEPL("create variable long UL = "
-				+ (Long.parseLong((String) stormConf.get("live.start.time")) + avgCalcInterval - 1000));
+				+ (Long.parseLong((String) stormConf.get("live.start.time")) + avgCalcInterval - 1));
 		cepAdm.createEPL("on beans.SmartPlugBean(timestamp > UL) set LL=(LL+" + avgCalcInterval
 				+ "), UL=(UL+" + avgCalcInterval + ") ");
 
-		String epl = "select houseId,AVG(value) as avgVal,timestamp,current_timestamp FROM "
-				+ "beans.SmartPlugBean(property=" + stormConf.get("LOAD_PROPERTY")
+		String epl = "select count(*),houseId,AVG(value) as avgVal,timestamp,current_timestamp FROM "
+				+ "beans.SmartPlugBean(property="
+				+ stormConf.get("LOAD_PROPERTY")
 				+ ").std:groupwin(houseId).win:keepall()"
 				+ ".win:expr(timestamp >=LL AND timestamp<UL) group by houseId";
-		System.out.println(epl);
 		EPStatement cepStatement = cepAdm.createEPL(epl);
 		cepStatement.setSubscriber(this);
 	}

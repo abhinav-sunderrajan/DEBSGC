@@ -84,9 +84,9 @@ public class ArchiveMedianPerPlugBolt implements IRichBolt {
 		next.setPlugId(bean.getPlugId());
 		next.setReadingsCount(bean.getReadingsCount());
 		next.setTimeSlice(timeSlice);
+		next.setDayCount(bean.getDayCount());
 		ringBuffer.publish(sequence);
-		ringBuffer.publish(sequence);
-		_collector.emit(new Values(bean, houseId, timeSlice));
+		_collector.emit(new Values(bean, houseId, timeSlice, bean.getDayCount()));
 
 	}
 

@@ -3,6 +3,8 @@ package bolts;
 import java.text.ParseException;
 import java.util.Map;
 
+import org.apache.log4j.Logger;
+
 import backtype.storm.task.OutputCollector;
 import backtype.storm.task.TopologyContext;
 import backtype.storm.topology.IRichBolt;
@@ -40,6 +42,9 @@ public class CurrentLoadAvgPerPlugBolt implements IRichBolt {
 	private OutputCollector _collector;
 	private long avgCalcInterval;
 	private Fields outFields;
+	private long emitCount = 0;
+	private long queryEvalTime;
+	private static final Logger LOGGER = Logger.getLogger(CurrentLoadAvgPerPlugBolt.class);
 
 	/**
 	 * Initialize with the size of the window for calculating the current
@@ -54,11 +59,17 @@ public class CurrentLoadAvgPerPlugBolt implements IRichBolt {
 		this.outFields = outFields;
 	}
 
-	public void update(Integer houseId, Integer householdId, Integer plugId, Double averageLoad,
-			Long timestamp, Long evaluationTime) {
+	public void update(Long count, Integer houseId, Integer householdId, Integer plugId,
+			Double averageLoad, Long timestamp) {
 		_collector.emit(new Values(houseId, householdId, plugId, new CurrentLoadPerPlugBean(houseId
 				.shortValue(), householdId.shortValue(), plugId.shortValue(), averageLoad,
-				timestamp, evaluationTime)));
+				timestamp, queryEvalTime)));
+		// emitCount++;
+		// if (emitCount % 10000 == 0) {
+		// LOGGER.info("Number of records in plug" + houseId + "_" + householdId
+		// + "_" + plugId
+		// + " window:" + count);
+		// }
 	}
 
 	@Override
@@ -74,12 +85,12 @@ public class CurrentLoadAvgPerPlugBolt implements IRichBolt {
 		cepAdm.createEPL("create variable long LL = "
 				+ Long.parseLong((String) stormConf.get("live.start.time")));
 		cepAdm.createEPL("create variable long UL = "
-				+ ((Long.parseLong((String) stormConf.get("live.start.time")) + avgCalcInterval - 1000)));
+				+ ((Long.parseLong((String) stormConf.get("live.start.time")) + avgCalcInterval - 1)));
 		cepAdm.createEPL("on beans.SmartPlugBean(timestamp > UL) set LL=(LL+" + avgCalcInterval
 				+ "), UL=(UL+" + avgCalcInterval + ") ");
 		EPStatement cepStatement = cepAdm
-				.createEPL("select houseId,householdId,plugId, AVG(value) as "
-						+ "avgVal,timestamp,current_timestamp FROM "
+				.createEPL("select count(*),houseId,householdId,plugId, AVG(value) as "
+						+ "avgVal,timestamp FROM "
 						+ "beans.SmartPlugBean(property="
 						+ stormConf.get("LOAD_PROPERTY")
 						+ ").std:groupwin(houseId,householdId,plugId).win:keepall()"
@@ -90,6 +101,7 @@ public class CurrentLoadAvgPerPlugBolt implements IRichBolt {
 
 	@Override
 	public void execute(Tuple input) {
+		queryEvalTime = System.currentTimeMillis();
 		cepRT.sendEvent((SmartPlugBean) input.getValue(0));
 
 	}

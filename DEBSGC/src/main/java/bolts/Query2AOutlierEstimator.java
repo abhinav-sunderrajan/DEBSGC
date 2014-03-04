@@ -49,7 +49,7 @@ public class Query2AOutlierEstimator implements IRichBolt {
 		config.setConnectionPoolSize(2);
 
 		// Redisson will use load balance connections between listed servers
-		config.addAddress("172.25.187.111:6379");
+		config.addAddress(stormConf.get("redis.server") + ":6379");
 		redisson = Redisson.create(config);
 		houseIdMap = redisson.getMap("query2a");
 

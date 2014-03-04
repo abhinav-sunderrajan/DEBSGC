@@ -30,8 +30,11 @@ public class Query1ALiveArchiveJoin implements IRichBolt {
 	private transient DescriptiveStatistics stats;
 	private Fields outFields;
 	private static int count = 0;
+	private Long prevTime;
+	private String prevKey;
 	private Map stormConf;
 	private Redisson redisson;
+	private Long sliceInMin;
 	private Map<Short, ConcurrentHashMap<String, CircularList<Double>>> averageLoadPerHousePerTimeSlice;
 	private static final Logger LOGGER = Logger.getLogger(Query1ALiveArchiveJoin.class);
 
@@ -42,11 +45,24 @@ public class Query1ALiveArchiveJoin implements IRichBolt {
 		stats = new DescriptiveStatistics();
 		Config config = new Config();
 		config.setConnectionPoolSize(2);
+		sliceInMin = (Long) stormConf.get("SLICE_IN_MINUTES");
 
 		// Redisson will use load balance connections between listed servers
 		config.addAddress(stormConf.get("redis.server") + ":6379");
 		redisson = Redisson.create(config);
 		averageLoadPerHousePerTimeSlice = redisson.getMap("query1a");
+
+		prevTime = Long.parseLong((String) stormConf.get("live.start.time"));
+		cal.setTimeInMillis(prevTime + 2 * sliceInMin * 60 * 1000);
+		int hrs = cal.get(Calendar.HOUR);
+		int mnts = cal.get(Calendar.MINUTE);
+		String predTimeStart = String.format("%02d:%02d", hrs, mnts);
+		cal.setTimeInMillis(prevTime + 3 * sliceInMin * 60 * 1000);
+		hrs = cal.get(Calendar.HOUR);
+		mnts = cal.get(Calendar.MINUTE);
+		String predTimeEnd = String.format("%02d:%02d", hrs, mnts);
+
+		prevKey = predTimeStart + " TO " + predTimeEnd;
 
 	}
 
@@ -56,19 +72,27 @@ public class Query1ALiveArchiveJoin implements IRichBolt {
 
 	@Override
 	public void execute(Tuple input) {
-
+		String key;
 		CurrentLoadPerHouseBean currentLoad = (CurrentLoadPerHouseBean) input.getValue(1);
-		Long sliceInMin = (Long) stormConf.get("SLICE_IN_MINUTES");
-		cal.setTimeInMillis(currentLoad.getCurrTime() + 2 * sliceInMin * 60 * 1000);
-		int hrs = cal.get(Calendar.HOUR);
-		int mnts = cal.get(Calendar.MINUTE);
-		String predTimeStart = String.format("%02d:%02d", hrs, mnts);
-		cal.setTimeInMillis(currentLoad.getCurrTime() + 3 * sliceInMin * 60 * 1000);
-		hrs = cal.get(Calendar.HOUR);
-		mnts = cal.get(Calendar.MINUTE);
-		String predTimeEnd = String.format("%02d:%02d", hrs, mnts);
+		Long time = currentLoad.getCurrTime();
+		if (time - prevTime < sliceInMin * 60 * 1000) {
+			key = prevKey;
+		} else {
+			cal.setTimeInMillis(time + 2 * sliceInMin * 60 * 1000);
+			int hrs = cal.get(Calendar.HOUR);
+			int mnts = cal.get(Calendar.MINUTE);
+			String predTimeStart = String.format("%02d:%02d", hrs, mnts);
+			cal.setTimeInMillis(time + 3 * sliceInMin * 60 * 1000);
+			hrs = cal.get(Calendar.HOUR);
+			mnts = cal.get(Calendar.MINUTE);
+			String predTimeEnd = String.format("%02d:%02d", hrs, mnts);
 
-		String key = predTimeStart + " TO " + predTimeEnd;
+			key = predTimeStart + " TO " + predTimeEnd;
+			prevTime = time;
+			prevKey = key;
+
+		}
+
 		CircularList<Double> values = averageLoadPerHousePerTimeSlice.get(currentLoad.getHouseId())
 				.get(key);
 
@@ -84,6 +108,7 @@ public class Query1ALiveArchiveJoin implements IRichBolt {
 		}
 
 		count++;
+
 		// if (count % 1000 == 0) {
 		// LOGGER.info(key + " " + values);
 		// }

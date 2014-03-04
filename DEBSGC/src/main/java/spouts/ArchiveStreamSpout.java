@@ -37,6 +37,7 @@ public class ArchiveStreamSpout<E> extends BaseRichSpout {
 	private ConcurrentLinkedQueue<HistoryBean> archiveStreamBufferArr;
 	private Long startTime;
 	private int count = 0;
+	private int dayCount;
 
 	@Override
 	public void open(Map conf, TopologyContext context, SpoutOutputCollector collector) {
@@ -44,15 +45,26 @@ public class ArchiveStreamSpout<E> extends BaseRichSpout {
 		executor = Executors.newScheduledThreadPool(1);
 		ScheduledFuture<?> future = executor.scheduleAtFixedRate(new ArchiveLoader<HistoryBean>(
 				connectionProperties, archiveStreamBufferArr, (long) conf.get("SLICE_IN_MINUTES"),
-				startTime, (String) conf.get("redis.server")), 0, (long) conf.get("dbLoadRate"),
-				TimeUnit.SECONDS);
+				startTime, (String) conf.get("redis.server"), dayCount), 0, (long) conf
+				.get("dbLoadRate"), TimeUnit.SECONDS);
+
 	}
 
+	/**
+	 * Initialize the archive stream spout one for each day in the archive
+	 * 
+	 * @param archiveStreamBufferArr
+	 * @param connectionProperties
+	 * @param startTime
+	 * @param dayCount
+	 *            -- Archive spout count (starts from 1)
+	 */
 	public ArchiveStreamSpout(ConcurrentLinkedQueue<HistoryBean> archiveStreamBufferArr,
-			Properties connectionProperties, Long startTime) {
+			Properties connectionProperties, Long startTime, int dayCount) {
 		this.archiveStreamBufferArr = archiveStreamBufferArr;
 		this.connectionProperties = connectionProperties;
 		this.startTime = startTime;
+		this.dayCount = dayCount;
 	}
 
 	@Override
@@ -63,6 +75,7 @@ public class ArchiveStreamSpout<E> extends BaseRichSpout {
 				return;
 			}
 
+			@SuppressWarnings("unchecked")
 			E obj = (E) archiveStreamBufferArr.poll();
 			if (obj instanceof HistoryBean) {
 				HistoryBean historyBean = (HistoryBean) obj;

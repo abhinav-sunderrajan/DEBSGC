@@ -14,14 +14,14 @@ import beans.SmartPlugBean;
  * @author abhinav
  * 
  */
-public class GlobalMedianLoadBolt extends EsperEnrichedBolt {
+public class GlobalMedianLoadPerHourBolt extends EsperEnrichedBolt {
 
 	/**
 	 * 
 	 */
 	private static final long serialVersionUID = 1L;
 	private Fields outputFields;
-	private static final Logger LOGGER = Logger.getLogger(GlobalMedianLoadBolt.class);
+	private static final Logger LOGGER = Logger.getLogger(GlobalMedianLoadPerHourBolt.class);
 	private static int count = 0;
 
 	/**
@@ -35,7 +35,7 @@ public class GlobalMedianLoadBolt extends EsperEnrichedBolt {
 	 * @param outputFields
 	 *            - output fields of this bolt.
 	 */
-	public GlobalMedianLoadBolt(String[] eventTypes, String[] queries, String esperEngineName,
+	public GlobalMedianLoadPerHourBolt(String[] eventTypes, String[] queries, String esperEngineName,
 			Fields outputFields) {
 		super(eventTypes, queries, esperEngineName);
 		this.outputFields = outputFields;

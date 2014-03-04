@@ -1,6 +1,5 @@
 package bolts;
 
-import java.sql.Timestamp;
 import java.util.Map;
 
 import org.apache.log4j.Logger;
@@ -12,7 +11,6 @@ import backtype.storm.topology.IRichBolt;
 import backtype.storm.topology.OutputFieldsDeclarer;
 import backtype.storm.tuple.Fields;
 import backtype.storm.tuple.Tuple;
-import backtype.storm.tuple.Values;
 import beans.SmartPlugBean;
 
 import com.espertech.esper.client.Configuration;
@@ -22,7 +20,7 @@ import com.espertech.esper.client.EPServiceProvider;
 import com.espertech.esper.client.EPServiceProviderManager;
 import com.espertech.esper.client.EPStatement;
 
-public class PerPlugMedianBolt implements IRichBolt {
+public class GlobalMedianWorkPerDayBolt implements IRichBolt {
 
 	/**
 	 * 
@@ -35,9 +33,9 @@ public class PerPlugMedianBolt implements IRichBolt {
 	private OutputCollector _collector;
 	private Fields outFields;
 	private static long count = 0;
-	private static final Logger LOGGER = Logger.getLogger(PerPlugMedianBolt.class);
+	private static final Logger LOGGER = Logger.getLogger(GlobalMedianWorkPerDayBolt.class);
 
-	public PerPlugMedianBolt(Fields fields) {
+	public GlobalMedianWorkPerDayBolt(Fields fields) {
 		outFields = fields;
 	}
 
@@ -46,10 +44,11 @@ public class PerPlugMedianBolt implements IRichBolt {
 		_collector = collector;
 		cepConfig = new Configuration();
 		cepConfig.getEngineDefaults().getThreading().setListenerDispatchPreserveOrder(false);
-		cep = EPServiceProviderManager.getProvider("PerHouseStatisticBolt", cepConfig);
+		cep = EPServiceProviderManager.getProvider("GlobalMedianWorkPerDayBolt_" + this.hashCode(),
+				cepConfig);
 		cepConfig.addEventType("SmartPlugBean", SmartPlugBean.class.getName());
 
-		String queries[] = ProjectUtils.getMedianLoadPerPlugPerHour();
+		String queries[] = ProjectUtils.getGlobalMedianLoadPerDay();
 		EPStatement cepStatement = null;
 		cepRT = cep.getEPRuntime();
 		cepAdm = cep.getEPAdministrator();
@@ -63,22 +62,24 @@ public class PerPlugMedianBolt implements IRichBolt {
 		}
 
 		cepStatement.setSubscriber(this);
+
 	}
 
 	@Override
 	public void execute(Tuple input) {
-		cepRT.sendEvent((SmartPlugBean) input.getValue(0));
+		// TODO Auto-generated method stub
 
 	}
 
 	@Override
 	public void cleanup() {
+		// TODO Auto-generated method stub
 
 	}
 
 	@Override
 	public void declareOutputFields(OutputFieldsDeclarer declarer) {
-		declarer.declare(outFields);
+		// TODO Auto-generated method stub
 
 	}
 
@@ -88,17 +89,4 @@ public class PerPlugMedianBolt implements IRichBolt {
 		return null;
 	}
 
-	public void update(Double medianLoad, Double globalMedian, Long timestampStart,
-			Long timestampEnd, Long queryEvalTime, Integer houseId, Integer householdId,
-			Integer plugId) {
-		if (count % 1000 == 0) {
-			LOGGER.info("median for plug " + houseId + "_" + "_" + householdId + "_" + plugId
-					+ " is " + medianLoad + " at " + new Timestamp(timestampStart));
-		}
-
-		_collector.emit(new Values(medianLoad, globalMedian, timestampStart, timestampEnd,
-				queryEvalTime, houseId, householdId, plugId));
-		count++;
-
-	}
 }

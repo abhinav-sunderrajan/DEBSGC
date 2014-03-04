@@ -23,6 +23,7 @@ public class HistoryBean implements Serializable {
 	private float averageLoad;
 	private int readingsCount;
 	private String timeSlice;
+	private int dayCount;
 	public final static EventFactory<HistoryBean> EVENT_FACTORY = new EventFactory<HistoryBean>() {
 		public HistoryBean newInstance() {
 			return new HistoryBean();
@@ -43,13 +44,14 @@ public class HistoryBean implements Serializable {
 	 * @param timeSlice
 	 */
 	public HistoryBean(short houseId, short householdId, short plugId, float averageLoad,
-			int readingsCount, String timeSlice) {
+			int readingsCount, String timeSlice, int dayCount) {
 		this.houseId = houseId;
 		this.householdId = householdId;
 		this.plugId = plugId;
 		this.averageLoad = averageLoad;
 		this.readingsCount = readingsCount;
 		this.timeSlice = timeSlice;
+		this.dayCount = dayCount;
 	}
 
 	public short getHouseId() {
@@ -98,6 +100,14 @@ public class HistoryBean implements Serializable {
 
 	public void setTimeSlice(String timeSlice) {
 		this.timeSlice = timeSlice;
+	}
+
+	public int getDayCount() {
+		return dayCount;
+	}
+
+	public void setDayCount(int dayCount) {
+		this.dayCount = dayCount;
 	}
 
 }

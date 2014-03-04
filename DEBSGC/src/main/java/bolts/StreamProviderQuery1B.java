@@ -1,16 +1,17 @@
 package bolts;
 
+import java.net.UnknownHostException;
+import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.log4j.Logger;
 
-import utils.OutputDF;
 import backtype.storm.topology.OutputFieldsDeclarer;
 import backtype.storm.tuple.Tuple;
 
 public class StreamProviderQuery1B extends StreamProviderBolt {
 
-	public StreamProviderQuery1B(String serverIP, int serverPort) {
+	public StreamProviderQuery1B(String serverIP, int serverPort) throws UnknownHostException {
 		super(serverIP, serverPort);
 	}
 
@@ -27,21 +28,29 @@ public class StreamProviderQuery1B extends StreamProviderBolt {
 		Double currentLoad = input.getDouble(1);
 		Double predictedLoad = input.getDouble(2);
 		String time = input.getString(3);
-		Long queryLat = System.currentTimeMillis() - input.getLong(4);
-		if (queryLat < 0) {
-			queryLat = 2l;
+		Long queryLat = (System.currentTimeMillis() - input.getLong(4));
+		// long sequence = ringBuffer.next();
+		// OutputDF df = ringBuffer.get(sequence);
+		// df.clear();
+		// df.add(plugId, currentLoad, predictedLoad, time, queryLat);
+		if (count == 0) {
+			LOGGER.info("HOST NAME\t JVM % FREE\t QUERY LATENCY(ms)\t CURRENT LOAD\t PREDICTED LOAD\t PLUG ID\t TIME");
+
 		}
-		long sequence = ringBuffer.next();
-		OutputDF df = ringBuffer.get(sequence);
-		df.clear();
-		df.add(plugId, currentLoad, predictedLoad, time, queryLat);
-		ringBuffer.publish(sequence);
+
 		count++;
-		if (count % 2000 == 0) {
-			LOGGER.info("Current load:" + currentLoad + " Predicted load:" + predictedLoad
-					+ " for:" + plugId + " at:" + time);
-			LOGGER.info("Query latency is milli secs is " + queryLat);
+
+		if (count % 20000 == 0) {
+			double totalMem = runtime.totalMemory();
+			double freemem = runtime.freeMemory();
+			Map<String, Double> map = new HashMap<String, Double>();
+			double jvmFreePer = (freemem * 100) / totalMem;
+			map.put(localhost, jvmFreePer);
+			// df.add(map);
+			LOGGER.info(localhost + "\t" + jvmFreePer + "\t" + queryLat + "\t" + currentLoad + "\t"
+					+ predictedLoad + "\t" + plugId + "\t" + time);
 		}
+		// ringBuffer.publish(sequence);
 
 	}
 

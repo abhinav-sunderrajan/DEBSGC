@@ -18,6 +18,7 @@ import org.redisson.core.MessageListener;
 import org.redisson.core.RTopic;
 
 import utils.DatabaseAccess;
+import backtype.storm.utils.Utils;
 import beans.HistoryBean;
 
 public class ArchiveLoader<T> implements Runnable {
@@ -31,6 +32,8 @@ public class ArchiveLoader<T> implements Runnable {
 	private ConcurrentLinkedQueue<HistoryBean> archiveStreamBufferArr;
 	private Redisson redisson;
 	private RTopic<Integer> monitor;
+	private int dayCount;
+
 	private static final Logger LOGGER = Logger.getLogger(ArchiveLoader.class);
 
 	/**
@@ -39,15 +42,18 @@ public class ArchiveLoader<T> implements Runnable {
 	 * @param monitor
 	 * @param startTime
 	 * @param rediserverIp
+	 * @param streamCount
+	 * @param numOfArchiveStreams
 	 */
 	public ArchiveLoader(Properties connectionProperties,
 			ConcurrentLinkedQueue<HistoryBean> archiveStreamBufferArr, long sliceInMinutes,
-			long startTime, String rediserverIp) {
+			long startTime, String rediserverIp, int dayCount) {
 		dbconnect.openDBConnection(connectionProperties);
 		this.sliceInMinutes = sliceInMinutes;
 		houseIdList = new HashSet<Short>();
 		this.startTime = startTime;
 		this.endTime = startTime + (sliceInMinutes * 60 * 1000);
+		this.dayCount = dayCount;
 		cal = Calendar.getInstance();
 		this.archiveStreamBufferArr = archiveStreamBufferArr;
 
@@ -55,13 +61,15 @@ public class ArchiveLoader<T> implements Runnable {
 		redissonConfig.addAddress(rediserverIp + ":6379");
 		redisson = Redisson.create(redissonConfig);
 		monitor = redisson.getTopic("monitor");
+		Runtime.getRuntime().addShutdownHook(new ShutDownHook());
+
 	}
 
 	@Override
 	public void run() {
 		ResultSet rs = dbconnect
 				.retrieveQueryResult("SELECT AVG(value) AS avgLoad, count(*) as counts,house_id,household_id"
-						+ ",plug_id FROM sensor_data_archive WHERE time_stamp >="
+						+ ",plug_id FROM sensor_data_archive_7 WHERE time_stamp >="
 						+ startTime
 						+ " AND time_stamp < "
 						+ endTime
@@ -78,6 +86,7 @@ public class ArchiveLoader<T> implements Runnable {
 				bean.setHouseId(rs.getShort("house_id"));
 				bean.setHouseholdId(rs.getShort("household_id"));
 				bean.setPlugId(rs.getShort("plug_id"));
+				bean.setDayCount(dayCount);
 				houseIdList.add(bean.getHouseId());
 
 				cal.setTimeInMillis(startTime);
@@ -93,15 +102,18 @@ public class ArchiveLoader<T> implements Runnable {
 
 				archiveStreamBufferArr.add(bean);
 			}
-			// Create a punctuation event for each house id after each database
-			// load
 
+			// Create a punctuation event for each house id after each database
+			// load.
+
+			Utils.sleep(10);
 			for (short houseId : houseIdList) {
 				HistoryBean punctuation = new HistoryBean(houseId, (short) -1, (short) -1, -1.0f,
-						1, timeSlice);
+						1, timeSlice, dayCount);
 				archiveStreamBufferArr.add(punctuation);
 			}
 			houseIdList.clear();
+
 			// End of punctuation events
 
 			count++;
@@ -135,5 +147,22 @@ public class ArchiveLoader<T> implements Runnable {
 			e.printStackTrace();
 		}
 
+	}
+
+	/**
+	 * 
+	 * Call on JVM exit to close the buffered reader connections.
+	 * 
+	 */
+	private class ShutDownHook extends Thread {
+
+		public void run() {
+			// Write the output to a file
+			try {
+				dbconnect.closeConnection();
+			} catch (SQLException e) {
+				LOGGER.error("Error clsoing database connection", e);
+			}
+		}
 	}
 }
