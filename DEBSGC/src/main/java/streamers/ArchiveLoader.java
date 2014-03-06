@@ -75,7 +75,7 @@ public class ArchiveLoader<T> implements Runnable {
 						+ endTime
 						+ " AND property="
 						+ PlatformCore.LOAD_PROPERTY
-						+ " GROUP BY house_id,household_id,plug_id ORDER BY house_id,household_id,plug_id");
+						+ " AND house_id<10 GROUP BY house_id,household_id,plug_id ORDER BY house_id,household_id,plug_id");
 		try {
 			String timeSlice = null;
 			while (rs.next()) {

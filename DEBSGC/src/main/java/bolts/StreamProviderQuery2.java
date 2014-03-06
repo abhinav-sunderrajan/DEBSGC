@@ -1,11 +1,9 @@
 package bolts;
 
-import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.log4j.Logger;
 
-import utils.OutputDF;
 import backtype.storm.topology.OutputFieldsDeclarer;
 import backtype.storm.tuple.Tuple;
 
@@ -28,23 +26,27 @@ public class StreamProviderQuery2 extends StreamProviderBolt {
 		Double percentage = input.getDouble(2);
 		Integer houseId = input.getInteger(1);
 		String time = input.getString(0);
-		long sequence = ringBuffer.next();
-		OutputDF df = ringBuffer.get(sequence);
-		df.clear();
-		df.add(queryLat, percentage, houseId, time);
+		// long sequence = ringBuffer.next();
+		// OutputDF df = ringBuffer.get(sequence);
+		// df.clear();
+		// df.add(queryLat, percentage, houseId, time);
+		if (count == 0) {
+			LOGGER.info("HOST NAME\t JVM % FREE\t QUERY LATENCY(ms)\t PERCENTAGE OUTLIERS\t  HOUSE ID\t TIME");
+
+		}
+
 		count++;
-		if (count % 1000 == 0) {
-			LOGGER.info("% of plugs above global median for houseId " + houseId + " at " + time
-					+ " is " + percentage);
-			LOGGER.info("Query latency is milli secs is " + queryLat);
+		if (count % 100 == 0) {
 			double totalMem = runtime.totalMemory();
 			double freemem = runtime.freeMemory();
-			Map<String, Double> map = new HashMap<String, Double>();
-			map.put(localhost, (freemem * 100) / totalMem);
-			LOGGER.info("free mem at " + localhost + " is " + freemem);
-			df.add(map);
+			double jvmFreePer = (freemem * 100) / totalMem;
+			// Map<String, Double> map = new HashMap<String, Double>();
+			// map.put(localhost, jvmFreePer);
+			// df.add(map);
+			LOGGER.info(localhost + "\t" + jvmFreePer + "\t" + queryLat + "\t" + percentage + "\t"
+					+ houseId + "\t" + time);
 		}
-		ringBuffer.publish(sequence);
+		// ringBuffer.publish(sequence);
 
 	}
 

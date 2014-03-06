@@ -9,7 +9,7 @@ public class ProjectUtils {
 	private static final int WORK_PROPERTY = 0;
 
 	public static String[] getGlobalMedianLoadPerHourQuery() {
-		String query1 = "SELECT MEDIAN(value) as medianVal,current_timestamp,* "
+		String query1 = "SELECT histMedian(value) as medianVal,current_timestamp,* "
 				+ "FROM beans.SmartPlugBean(property=" + LOAD_PROPERTY
 				+ ").win:ext_timed(timestamp, 3600 seconds)";
 		String[] queries = { query1 };
@@ -28,7 +28,7 @@ public class ProjectUtils {
 
 	public static String[] getMedianLoadPerPlugPerHour() {
 		String query1 = "SELECT MEDIAN(value) as medianLoadPlug,globalMedian"
-				+ ",timestamp,(timestamp - 3600 * 1000),queryEvalTime"
+				+ ",timestamp,queryEvalTime"
 				+ ",houseId,householdId,plugId FROM beans.SmartPlugBean(property=" + LOAD_PROPERTY
 				+ ").std:groupwin(houseId,householdId,plugId)"
 				+ ".win:ext_timed(timestamp, 3600 seconds) GROUP BY houseId,householdId,plugId";

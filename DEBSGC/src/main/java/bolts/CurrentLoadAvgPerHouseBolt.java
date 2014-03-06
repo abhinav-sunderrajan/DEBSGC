@@ -82,7 +82,7 @@ public class CurrentLoadAvgPerHouseBolt implements IRichBolt {
 		String epl = "select count(*),houseId,AVG(value) as avgVal,timestamp,current_timestamp FROM "
 				+ "beans.SmartPlugBean(property="
 				+ stormConf.get("LOAD_PROPERTY")
-				+ ").std:groupwin(houseId).win:keepall()"
+				+ ", houseId<10).std:groupwin(houseId).win:keepall()"
 				+ ".win:expr(timestamp >=LL AND timestamp<UL) group by houseId";
 		EPStatement cepStatement = cepAdm.createEPL(epl);
 		cepStatement.setSubscriber(this);

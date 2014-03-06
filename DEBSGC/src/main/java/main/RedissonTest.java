@@ -1,26 +1,24 @@
 package main;
 
 import java.util.Calendar;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Map.Entry;
+import java.util.concurrent.ConcurrentMap;
 
 import org.redisson.Config;
 import org.redisson.Redisson;
 
-import utils.CircularList;
-
 public class RedissonTest {
 
-	private Map<Integer, ConcurrentHashMap<String, CircularList<Double>>> averageLoadPerHousePerTimeSlice;
+	private ConcurrentMap<Integer, ConcurrentMap<String, Boolean>> houseIdMap;
 	private Redisson redisson;
 
 	RedissonTest() {
 		Config config = new Config();
 
 		// Redisson will use load balance connections between listed servers
-		config.addAddress("172.25.187.111:6379");
+		config.addAddress("localhost:6379");
 		redisson = Redisson.create(config);
-		averageLoadPerHousePerTimeSlice = redisson.getMap("query1a");
+		houseIdMap = redisson.getMap("query2a");
 		Calendar cal = Calendar.getInstance();
 		long t = 1378604640000l;
 
@@ -33,15 +31,13 @@ public class RedissonTest {
 	}
 
 	public static void main(String[] args) {
-		RedissonTest test = new RedissonTest();
-		for (Integer id : test.averageLoadPerHousePerTimeSlice.keySet()) {
-			if (id != 4) {
-				continue;
-			}
 
-			System.out.println(id);
-			for (String time : test.averageLoadPerHousePerTimeSlice.get(id).keySet())
-				System.out.println(time);
+		RedissonTest test = new RedissonTest();
+		for (Integer id : test.houseIdMap.keySet()) {
+
+			System.out.println("<<<<< " + id + " >>>>>");
+			for (Entry<String, Boolean> entry : test.houseIdMap.get(id).entrySet())
+				System.out.println(entry.getKey() + "<<>>" + entry.getValue());
 			System.out.println("____________________________________________________________");
 
 		}

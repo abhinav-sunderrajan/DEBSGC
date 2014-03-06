@@ -34,7 +34,7 @@ public class SmartPlugBean implements Serializable {
 	 * @param householdId
 	 * @param houseId
 	 */
-	public SmartPlugBean(long id, long timestamp, float value, short property, short plugId,
+	public SmartPlugBean(long id, long timestamp, Float value, short property, short plugId,
 			short householdId, short houseId) {
 		super();
 		this.id = id;

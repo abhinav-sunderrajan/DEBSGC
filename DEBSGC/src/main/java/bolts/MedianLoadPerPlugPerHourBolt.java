@@ -64,6 +64,7 @@ public class MedianLoadPerPlugPerHourBolt implements IRichBolt {
 		}
 
 		cepStatement.setSubscriber(this);
+
 	}
 
 	@Override
@@ -90,13 +91,13 @@ public class MedianLoadPerPlugPerHourBolt implements IRichBolt {
 	}
 
 	public void update(Double medianLoad, Double globalMedian, Long timestampStart,
-			Long timestampEnd, Long queryEvalTime, Integer houseId, Integer householdId,
-			Integer plugId) {
+			Long queryEvalTime, Integer houseId, Integer householdId, Integer plugId) {
 		if (count % 1000 == 0) {
 			LOGGER.info("median for plug " + houseId + "_" + "_" + householdId + "_" + plugId
 					+ " is " + medianLoad + " at " + new Timestamp(timestampStart));
 		}
 
+		Long timestampEnd = timestampStart - 3600 * 1000;
 		_collector.emit(new Values(medianLoad, globalMedian, timestampStart, timestampEnd,
 				queryEvalTime, houseId, householdId, plugId));
 		count++;

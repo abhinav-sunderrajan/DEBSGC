@@ -15,27 +15,19 @@ import java.util.concurrent.ScheduledExecutorService;
 import org.apache.log4j.Logger;
 import org.redisson.Redisson;
 
-import spouts.ArchiveStreamSpout;
 import spouts.LiveStreamSpout;
 import backtype.storm.Config;
 import backtype.storm.LocalCluster;
 import backtype.storm.StormSubmitter;
 import backtype.storm.generated.AlreadyAliveException;
 import backtype.storm.generated.InvalidTopologyException;
-import backtype.storm.topology.BoltDeclarer;
 import backtype.storm.topology.TopologyBuilder;
 import backtype.storm.tuple.Fields;
-import beans.HistoryBean;
 import beans.SmartPlugBean;
-import bolts.ArchiveMedianPerHouseBolt;
-import bolts.ArchiveMedianPerPlugBolt;
-import bolts.CurrentLoadAvgPerHouseBolt;
-import bolts.CurrentLoadAvgPerPlugBolt;
-import bolts.DatabaseInsertorBolt;
-import bolts.Query1ALiveArchiveJoin;
-import bolts.Query1BLiveArchiveJoin;
-import bolts.StreamProviderQuery1A;
-import bolts.StreamProviderQuery1B;
+import bolts.GlobalMedianLoadPerHourBolt;
+import bolts.MedianLoadPerPlugPerHourBolt;
+import bolts.Query2AOutlierEstimator;
+import bolts.StreamProviderQuery2;
 
 /**
  * A singleton instance of the stream processing platform to set up the
@@ -134,27 +126,33 @@ public class PlatformCore {
 			conf.put("WORK_PROPERTY", WORK_PROPERTY);
 			conf.put("NUMBER_OF_ARCHIVE_STREAMS", numberOfArchiveStreams);
 
-			// Bolt for computing the median from the archive streams
-			long archiveloadStart = archiveStartTime;
-			BoltDeclarer declarer = core.builder.setBolt("ArchiveMedianPerPlugBolt",
-					new ArchiveMedianPerPlugBolt(new Fields("HistoryBean", "houseid", "timeSlice",
-							"dayCount")), 5);
-
-			for (int count = 0; count < numberOfArchiveStreams; count++) {
-
-				ArchiveStreamSpout<HistoryBean> archiveStreamSpout = new ArchiveStreamSpout<HistoryBean>(
-						new ConcurrentLinkedQueue<HistoryBean>(), connectionProperties,
-						archiveloadStart, count + 1);
-				core.builder.setSpout("archive_stream_" + count, archiveStreamSpout);
-				declarer.fieldsGrouping("archive_stream_" + count, new Fields("houseId",
-						"householdId", "plugId", "timeSlice"));
-				archiveloadStart = archiveloadStart - 24 * 3600 * 1000;
-
-			}
-
-			core.builder.setBolt("ArchiveMedianPerHouseBolt", new ArchiveMedianPerHouseBolt(), 5)
-					.fieldsGrouping("ArchiveMedianPerPlugBolt",
-							new Fields("houseid", "timeSlice", "dayCount"));
+			// // Bolt for computing the median from the archive streams
+			// long archiveloadStart = archiveStartTime;
+			// BoltDeclarer declarer =
+			// core.builder.setBolt("ArchiveMedianPerPlugBolt",
+			// new ArchiveMedianPerPlugBolt(new Fields("HistoryBean", "houseid",
+			// "timeSlice",
+			// "dayCount")), 5);
+			//
+			// for (int count = 0; count < numberOfArchiveStreams; count++) {
+			//
+			// ArchiveStreamSpout<HistoryBean> archiveStreamSpout = new
+			// ArchiveStreamSpout<HistoryBean>(
+			// new ConcurrentLinkedQueue<HistoryBean>(), connectionProperties,
+			// archiveloadStart, count + 1);
+			// core.builder.setSpout("archive_stream_" + count,
+			// archiveStreamSpout);
+			// declarer.fieldsGrouping("archive_stream_" + count, new
+			// Fields("houseId",
+			// "householdId", "plugId", "timeSlice"));
+			// archiveloadStart = archiveloadStart - 24 * 3600 * 1000;
+			//
+			// }
+			//
+			// core.builder.setBolt("ArchiveMedianPerHouseBolt", new
+			// ArchiveMedianPerHouseBolt(), 5)
+			// .fieldsGrouping("ArchiveMedianPerPlugBolt",
+			// new Fields("houseid", "timeSlice", "dayCount"));
 
 			// After 24 hours all but one archive thread can be cancelled since
 			// the median values for other time slices are stored in memory.
@@ -166,92 +164,97 @@ public class PlatformCore {
 			core.builder.setSpout("live_stream", liveStreamLoadSpout);
 
 			// Save the Live streams to the database as and when it comes.
-			core.builder.setBolt("DatabaseInsertorBolt", new DatabaseInsertorBolt(), 10)
-					.shuffleGrouping("live_stream");
+			// core.builder.setBolt("DatabaseInsertorBolt", new
+			// DatabaseInsertorBolt(), 10)
+			// .shuffleGrouping("live_stream");
 
 			// Topology for query 1a
-			core.builder.setBolt(
-					"CurrentLoadAvgPerHouseBolt",
-					new CurrentLoadAvgPerHouseBolt(sliceInMin * 60000, new Fields("houseId",
-							"CurrentLoadPerHouseBean")), 10).fieldsGrouping("live_stream",
-					new Fields("houseId"));
-
-			core.builder.setBolt(
-					"Query1ALiveArchiveJoin",
-					new Query1ALiveArchiveJoin(new Fields("houseId", "currentLoad",
-							"predictedLoad", "predictedTimeString", "evalTime")), 10)
-					.fieldsGrouping("CurrentLoadAvgPerHouseBolt", new Fields("houseId"));
-			core.builder.setBolt(
-					"StreamProviderQuery1A",
-					new StreamProviderQuery1A(
-							configProperties.getProperty("query1a.subscriber.ip"), Integer
-									.parseInt(configProperties
-											.getProperty("query1a.subscriber.port"))), 1)
-					.globalGrouping("Query1ALiveArchiveJoin");
-
-			// Topology for query 1b
-			core.builder.setBolt(
-					"CurrentLoadAvgPerPlugBolt",
-					new CurrentLoadAvgPerPlugBolt(sliceInMin * 60000, new Fields("houseId",
-							"householdId", "plugId", "CurrentLoadPerPlugBean")), 5).fieldsGrouping(
-					"live_stream", new Fields("houseId", "householdId", "plugId"));
-			core.builder
-					.setBolt(
-							"Query1BLiveArchiveJoin",
-							new Query1BLiveArchiveJoin(new Fields("houseId_householdId_plugId",
-									"currentLoad", "predictedLoad", "predictedTimeString",
-									"evalTime")), 10).fieldsGrouping("CurrentLoadAvgPerPlugBolt",
-							new Fields("houseId", "householdId", "plugId"));
-			core.builder.setBolt(
-					"StreamProviderQuery1B",
-					new StreamProviderQuery1B(
-							configProperties.getProperty("query1b.subscriber.ip"), Integer
-									.parseInt(configProperties
-											.getProperty("query1b.subscriber.port"))), 1)
-					.globalGrouping("Query1BLiveArchiveJoin");
-
-			// Topology for query 2
-
-			// String[] medianBoltEvents = { SmartPlugBean.class.getName() };
-			//
-			// // Emits the median load for all plugs over window of the
-			// // specified size
 			// core.builder.setBolt(
-			// "GlobalMedianLoadPerHourBolt",
-			// new GlobalMedianLoadPerHourBolt(medianBoltEvents, ProjectUtils
-			// .getGlobalMedianLoadPerHourQuery(),
-			// "GlobalMedianLoadPerHourBolt",
-			// new Fields("livebean", "houseId", "householdId", "plugId")), 1)
-			// .globalGrouping("live_stream");
+			// "CurrentLoadAvgPerHouseBolt",
+			// new CurrentLoadAvgPerHouseBolt(sliceInMin * 60000, new
+			// Fields("houseId",
+			// "CurrentLoadPerHouseBean")), 10).fieldsGrouping("live_stream",
+			// new Fields("houseId"));
 			//
-			// // Calculates the median load per plug
 			// core.builder.setBolt(
-			// "MedianLoadPerPlugPerHourBolt",
-			// new MedianLoadPerPlugPerHourBolt(new Fields("medianLoad",
-			// "globalMedian",
-			// "timestampStart", "timestampEnd", "queryEvalTime", "houseId",
-			// "percentage", "latency")), 5).fieldsGrouping(
-			// "GlobalMedianLoadPerHourBolt", new Fields("houseId",
-			// "householdId", "plugId"));
-			//
-			// // Compares the median load of the plug with the global median
-			// // before estimating the outliers per house.
+			// "Query1ALiveArchiveJoin",
+			// new Query1ALiveArchiveJoin(new Fields("houseId", "currentLoad",
+			// "predictedLoad", "predictedTimeString", "evalTime")), 10)
+			// .fieldsGrouping("CurrentLoadAvgPerHouseBolt", new
+			// Fields("houseId"));
 			// core.builder.setBolt(
-			// "Query2AOutlierEstimator",
-			// new Query2AOutlierEstimator(new Fields("timeFrame", "houseId",
-			// "percentage",
-			// "latency")), 5).shuffleGrouping("PerPlugMedianBolt");
+			// "StreamProviderQuery1A",
+			// new StreamProviderQuery1A(
+			// configProperties.getProperty("query1a.subscriber.ip"), Integer
+			// .parseInt(configProperties
+			// .getProperty("query1a.subscriber.port"))), 1)
+			// .globalGrouping("Query1ALiveArchiveJoin");
 			//
-			// // Finally send to display
-			//
+			// // Topology for query 1b
+			// core.builder.setBolt(
+			// "CurrentLoadAvgPerPlugBolt",
+			// new CurrentLoadAvgPerPlugBolt(sliceInMin * 60000, new
+			// Fields("houseId",
+			// "householdId", "plugId", "CurrentLoadPerPlugBean")),
+			// 5).fieldsGrouping(
+			// "live_stream", new Fields("houseId", "householdId", "plugId"));
 			// core.builder
 			// .setBolt(
-			// "StreamProviderQuery2",
-			// new StreamProviderQuery2(configProperties
-			// .getProperty("query2.subscriber.ip"), Integer
+			// "Query1BLiveArchiveJoin",
+			// new Query1BLiveArchiveJoin(new
+			// Fields("houseId_householdId_plugId",
+			// "currentLoad", "predictedLoad", "predictedTimeString",
+			// "evalTime")), 10).fieldsGrouping("CurrentLoadAvgPerPlugBolt",
+			// new Fields("houseId", "householdId", "plugId"));
+			// core.builder.setBolt(
+			// "StreamProviderQuery1B",
+			// new StreamProviderQuery1B(
+			// configProperties.getProperty("query1b.subscriber.ip"), Integer
 			// .parseInt(configProperties
-			// .getProperty("query2.subscriber.port"))), 2)
-			// .shuffleGrouping("Query2AOutlierEstimator");
+			// .getProperty("query1b.subscriber.port"))), 1)
+			// .globalGrouping("Query1BLiveArchiveJoin");
+
+			// Topology for query 2 a
+
+			// Emits the median load for all plugs over window of the
+			// specified size
+			core.builder.setBolt(
+					"GlobalMedianLoadPerHourBolt_1hour",
+					new GlobalMedianLoadPerHourBolt(new Fields("livebean", "houseId",
+							"householdId", "plugId")), 1).globalGrouping("live_stream");
+
+			// Calculates the median load per plug over 1 hour
+			core.builder.setBolt(
+					"MedianLoadPerPlugPerHourBolt",
+					new MedianLoadPerPlugPerHourBolt(new Fields("medianLoad", "globalMedian",
+							"timestampStart", "timestampEnd", "queryEvalTime", "houseId",
+							"percentage", "latency")), 10).fieldsGrouping(
+					"GlobalMedianLoadPerHourBolt_1hour",
+					new Fields("houseId", "householdId", "plugId"));
+
+			// Compares the median load of the plug with the global median
+			// before estimating the outliers per house.
+			core.builder.setBolt(
+					"Query2AOutlierEstimator",
+					new Query2AOutlierEstimator(new Fields("timeFrame", "houseId", "percentage",
+							"latency")), 10).shuffleGrouping("MedianLoadPerPlugPerHourBolt");
+
+			core.builder
+					.setBolt(
+							"StreamProviderQuery2",
+							new StreamProviderQuery2(configProperties
+									.getProperty("query2.subscriber.ip"), Integer
+									.parseInt(configProperties
+											.getProperty("query2.subscriber.port"))), 1)
+					.shuffleGrouping("Query2AOutlierEstimator");
+
+			// Topology for query 2b
+
+			// core.builder.setBolt(
+			// "GlobalMedianLoadPerHourBolt_24hours",
+			// new GlobalMedianLoadPerHourBolt(new Fields("livebean", "houseId",
+			// "householdId", "plugId"), 24 * 3600 * 1000), 1).globalGrouping(
+			// "live_stream");
 
 			if (isLocal) {
 				LocalCluster cluster = new LocalCluster();
